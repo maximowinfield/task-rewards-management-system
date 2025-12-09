@@ -1,60 +1,118 @@
-# Microsoft-Style Fullstack Sample: React + TypeScript + C# Minimal API
+✨ Microsoft Full-Stack Sample
+React + TypeScript + .NET 8 Minimal API + Docker
 
-This is a compact portfolio to show skills aligned with Microsoft fullstack roles:
-I will continue to work on it throughout the month. - 8/17/2025
+A clean full-stack implementation using modern Microsoft technologies — hosted for real-world deployment demonstration.
 
-- **Front end**: React + TypeScript (Vite)
-- **Back end**: C# .NET 8 minimal API
-- **DevOps**: Dockerfiles for both, `docker-compose.yml`, and a simple GitHub Actions CI
+🚀 Live Demo
+Component	Link
+Frontend (GitHub Pages)	🔗 https://maximowinfield.github.io/Microsoft-Fullstack-Sample/
 
-<img width="815" height="319" alt="image" src="https://github.com/user-attachments/assets/e45c6371-5544-4454-a0e5-7c320f5a4fda" />
+Backend API (Render)	🔗 https://microsoft-fullstack-sample.onrender.com/api/todos
 
-## Quick start (local without Docker)
+📌 The backend may take 3–5 seconds to wake up due to the free Render tier.
 
-### API
+🧰 Tech Stack
+Frontend
 
-```bash
+⚛️ React (TypeScript + Vite)
+
+🎨 Modern, minimal UI
+
+🔌 Axios fetch to API
+
+🎯 State management with hooks
+
+Backend
+
+🧩 .NET 8 Minimal API
+
+🔄 RESTful endpoints
+
+🧪 In-memory persistence (upgrade path to EF Core / SQL)
+
+DevOps / Deployment
+
+🐳 Docker multi-service structure (api + web)
+
+🔄 GitHub Actions CI/CD for web deploy
+
+🌐 Host split:
+
+API → Render
+
+Frontend → GitHub Pages
+
+![App Screenshot](<img width="2554" height="450" alt="image" src="https://github.com/user-attachments/assets/bd8d7c40-5a9e-4d8b-a8c0-62347377b97c" />)
+
+🧠 Features
+
+✔ Real API + real UI with persistent actions
+✔ Add / toggle / delete todos
+✔ Production deployment example using Microsoft tools
+✔ Scalable architecture ready for:
+
+Authentication
+
+Database migration
+
+Cloud infra (Azure App Service / Static Web Apps)
+
+🛠️ Run Locally
+1️⃣ Clone the repo
+git clone https://github.com/maximowinfield/Microsoft-Fullstack-Sample.git
+cd Microsoft-Fullstack-Sample
+
+2️⃣ Run using Docker Compose
+docker compose up --build
+
+
+App available at:
+➡️ http://localhost:5173
+
+API available at:
+➡️ http://localhost:8080/api/health
+
+3️⃣ Or run manually (no Docker)
+Start API
 cd api
 dotnet run
-# serves on http://localhost:5000 by default if launched via `dotnet run`
-# this image config uses 8080; if needed, set ASPNETCORE_URLS=http://localhost:8080
-```
 
-### Web
-
-```bash
+Start Web
 cd web
-echo "VITE_API_URL=http://localhost:8080" > .env.local   # match your API port
 npm install
 npm run dev
-# open http://localhost:5173
-```
 
-## Quick start with Docker
+🔌 API Endpoints
+Method	Route	Description
+GET	/api/health	Health check
+GET	/api/todos	Fetch todos
+POST	/api/todos	Add todo
+PUT	/api/todos/{id}	Update status
+DELETE	/api/todos/{id}	Delete todo
+🧩 Architecture Overview
 
-```bash
-docker compose up --build
-# Web: http://localhost:5173  |  API: http://localhost:8080
-```
+┌────────────┐       HTTP        ┌───────────┐
+│  React UI  │ <----------------> │ .NET API │
+└────────────┘                   └───────────┘
+        │ Docker Compose (local)
+        ▼
+GitHub Actions CI  ➜  GitHub Pages (web)
+Render (api)
 
-## Endpoints
+🧪 Future Enhancements
 
-- `GET /api/health` -> `{ "status": "ok" }`
-- `GET /api/todos` -> list todos
-- `POST /api/todos` -> create todo `{ title, isDone }`
-- `PUT /api/todos/{id}` -> update todo
-- `DELETE /api/todos/{id}` -> delete todo
+🔐 JWT Authentication + Microsoft Identity
 
-## Highlights
+🗄️ SQL Database with EF Core
 
-- TypeScript + React UI that consumes a REST API
-- C# minimal API design and CORS
-- Containerization for both services and Compose for local orchestration
-- CI workflow that builds both sides
+☁️ Azure DevOps CI/CD
 
-## Ideas for next commits
+🔥 Logging + diagnostics + telemetry
 
-- Replace in-memory store with SQLite using EF Core
-- Add unit tests (xUnit for API, Vitest + React Testing Library for web)
-- Add GitHub Actions job to build and push Docker images
-- Deploy the API to Azure App Service and the web to Azure Static Web Apps
+👤 Author
+
+Maximo Winfield
+📌 Full-Stack Developer
+🔗 GitHub: https://github.com/maximowinfield
+
+🔗 LinkedIn: (Add link here if you want — great for networking!)
