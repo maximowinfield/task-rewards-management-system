@@ -83,19 +83,7 @@ cd web
 npm install
 npm run dev
 
-🔌 API Endpoints
-
-Method	Route	Description
-
-GET	/api/health	Health check
-
-GET	/api/todos	Fetch todos
-
-POST	/api/todos	Add todo
-
-PUT	/api/todos/{id}	Update status
-
-DELETE	/api/todos/{id}	Delete todo
+<img width="1378" height="569" alt="image" src="https://github.com/user-attachments/assets/ce5ffc41-df75-4dca-9c49-52d13fef48f2" />
 
 
 🧩 Architecture Overview
