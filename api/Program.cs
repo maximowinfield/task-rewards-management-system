@@ -15,9 +15,18 @@ using Microsoft.EntityFrameworkCore.Storage;
 var builder = WebApplication.CreateBuilder(args);
 
 // CORS: allow dev origins (adjust for production)
-builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
-    p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()
-));
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy =>
+        policy.WithOrigins(
+                "https://maximowinfield.github.io",
+                "http://localhost:5173"
+            )
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+    );
+});
+
 
 // EF Core + SQLite
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -53,7 +62,7 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 
-app.UseCors();
+app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
 
