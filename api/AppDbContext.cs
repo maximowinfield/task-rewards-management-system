@@ -10,14 +10,27 @@ public class AppDbContext : DbContext
     public DbSet<Redemption> Redemptions => Set<Redemption>();
 
     public DbSet<TodoItem> Todos => Set<TodoItem>();
+    public DbSet<AppUser> Users => Set<AppUser>();
+
 }
 
 // Entities (EF Core works best with classes)
+public class AppUser
+{
+    public string Id { get; set; } = "";           // Guid string is easiest
+    public string Username { get; set; } = "";     // Parent email OR kid username
+    public string PasswordHash { get; set; } = ""; // hashed password or PIN hash
+    public string Role { get; set; } = "Kid";      // "Parent" or "Kid"
+    public string? ParentId { get; set; }          // null for Parent, set for Kid
+}
+
 public class KidProfile
 {
     public string Id { get; set; } = "";
+    public string ParentId { get; set; } = "";     // NEW
     public string DisplayName { get; set; } = "";
 }
+
 
 public class KidTask
 {
@@ -25,9 +38,12 @@ public class KidTask
     public string Title { get; set; } = "";
     public int Points { get; set; }
     public string AssignedKidId { get; set; } = "";
+    public string CreatedByParentId { get; set; } = ""; // NEW
+
     public bool IsComplete { get; set; }
     public DateTime? CompletedAt { get; set; }
 }
+
 
 public class Reward
 {
