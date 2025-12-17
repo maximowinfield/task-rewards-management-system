@@ -26,8 +26,10 @@ A clean and modern implementation of Microsoft’s full-stack ecosystem — depl
 
 ### Backend
 - .NET 8 Minimal API
-- RESTful todo CRUD operations
-- In-memory data store (easy upgrade to EF Core + SQL)
+- RESTful API for todos, kids, tasks, rewards, and redemptions
+- Entity Framework Core with SQLite persistence
+- Automatic database initialization and migrations
+
 
 ### DevOps / Hosting
 - Docker Compose for full-stack local deployment
