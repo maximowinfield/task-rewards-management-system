@@ -14,17 +14,18 @@ using Microsoft.EntityFrameworkCore.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// CORS: allow dev origins (adjust for production)
+// CORS Policy: allow dev origins (adjust for production)
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("Frontend", policy =>
-        policy.WithOrigins("https://maximowinfield.github.io", "http://localhost:5173")
-              .AllowAnyHeader()
-              .AllowAnyMethod()
+        policy.WithOrigins(
+                "http://localhost:5173",
+                "https://maximowinfield.github.io"
+            )
+            .AllowAnyHeader()
+            .AllowAnyMethod()
     );
 });
-
-
 
 // EF Core + SQLite
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -34,7 +35,10 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>();
 
 // JWT Auth (Option B: Parent login + Kid session token)
-var jwtSecret = builder.Configuration["JWT_SECRET"] ?? "dev-only-secret-change-me";
+var jwtSecret =
+    builder.Configuration["JWT_SECRET"]
+    ?? "dev-only-secret-change-me-32chars-minimum!!"; // 32+ chars
+
 var jwtKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret));
 
 builder.Services
@@ -59,18 +63,25 @@ builder.Services.AddAuthorization(options =>
 });
 
 var app = builder.Build();
+app.MapGet("/__version", () => Results.Text("CORS-GROUP-V1")).AllowAnonymous();
 
-// 1) CORS first (so headers get added)
+
+// Routing + Middleware order matters
+app.UseRouting();
+
+// CORS must be before auth so headers get added
 app.UseCors("Frontend");
+
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Explicit OPTIONS handler for any /api/* route (fixes preflight on Render)
-app.MapMethods("/api/{*path}", new[] { "OPTIONS" }, () => Results.Ok())
-   .RequireCors("Frontend")
+// All /api routes MUST go through this group to inherit CORS reliably
+var api = app.MapGroup("/api")
+             .RequireCors("Frontend");
+
+// Preflight handler for anything under /api/*
+api.MapMethods("/{*path}", new[] { "OPTIONS" }, () => Results.Ok())
    .AllowAnonymous();
-
-
 
 
 // Helper: create JWT tokens
@@ -106,8 +117,7 @@ using (var scope = app.Services.CreateScope())
 
     var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<AppUser>>();
 
-    // Seed 2 parents if none exist
-    // ---- Seed default parents (Option B) ----
+    // Seed default parents
     try
     {
         var databaseCreator = db.Database.GetService<IRelationalDatabaseCreator>();
@@ -142,7 +152,6 @@ using (var scope = app.Services.CreateScope())
         Console.WriteLine($"User seed skipped: {ex.Message}");
     }
 
-
     var firstParentId = db.Users.Where(u => u.Role == "Parent").Select(u => u.Id).FirstOrDefault();
     if (string.IsNullOrWhiteSpace(firstParentId))
     {
@@ -151,23 +160,23 @@ using (var scope = app.Services.CreateScope())
     else if (!db.Kids.Any())
     {
         db.Kids.AddRange(
-           new KidProfile { Id = "kid-1", ParentId = firstParentId, DisplayName = "Kid 1" },
-          new KidProfile { Id = "kid-2", ParentId = firstParentId, DisplayName = "Kid 2" }
-         );
+            new KidProfile { Id = "kid-1", ParentId = firstParentId, DisplayName = "Kid 1" },
+            new KidProfile { Id = "kid-2", ParentId = firstParentId, DisplayName = "Kid 2" }
+        );
         db.SaveChanges();
     }
-
-
-    // Seed kids once (owned by first parent)
 }
 
-app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));
+// Health
+api.MapGet("/health", () => Results.Ok(new { status = "ok" }))
+   .RequireCors("Frontend")
+   .AllowAnonymous();
+
 
 // -------------------- Auth (Option B) --------------------
 
-
 // Parent login: returns Parent token
-app.MapPost("/api/parent/login", async (AppDbContext db, IPasswordHasher<AppUser> hasher, ParentLoginRequest req) =>
+api.MapPost("/parent/login", async (AppDbContext db, IPasswordHasher<AppUser> hasher, ParentLoginRequest req) =>
 {
     var user = await db.Users.FirstOrDefaultAsync(u => u.Username == req.Username && u.Role == "Parent");
     if (user is null) return Results.Unauthorized();
@@ -177,10 +186,13 @@ app.MapPost("/api/parent/login", async (AppDbContext db, IPasswordHasher<AppUser
 
     var token = CreateToken(subjectId: user.Id, role: "Parent");
     return Results.Ok(new { token, role = "Parent" });
-});
+})
+.RequireCors("Frontend")
+.AllowAnonymous();
+
 
 // Parent enters Kid Mode: returns Kid token scoped to a kid profile
-app.MapPost("/api/kid-session", async (ClaimsPrincipal principal, AppDbContext db, KidSessionRequest req) =>
+api.MapPost("/kid-session", async (ClaimsPrincipal principal, AppDbContext db, KidSessionRequest req) =>
 {
     var parentId = principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
     if (string.IsNullOrWhiteSpace(parentId)) return Results.Unauthorized();
@@ -194,8 +206,9 @@ app.MapPost("/api/kid-session", async (ClaimsPrincipal principal, AppDbContext d
 .RequireAuthorization("ParentOnly");
 
 // -------------------- Kids --------------------
+
 // Parent sees only their kids
-app.MapGet("/api/kids", async (ClaimsPrincipal principal, AppDbContext db) =>
+api.MapGet("/kids", async (ClaimsPrincipal principal, AppDbContext db) =>
 {
     var parentId = principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
     if (string.IsNullOrWhiteSpace(parentId)) return Results.Unauthorized();
@@ -208,13 +221,13 @@ app.MapGet("/api/kids", async (ClaimsPrincipal principal, AppDbContext db) =>
 // -------------------- Tasks --------------------
 
 // Parent can view tasks (optionally filter by kidId, but only if kid belongs to parent)
-app.MapGet("/api/tasks", async (ClaimsPrincipal principal, AppDbContext db, string? kidId) =>
+// Kid can view only their tasks
+api.MapGet("/tasks", async (ClaimsPrincipal principal, AppDbContext db, string? kidId) =>
 {
     var role = principal.FindFirstValue(ClaimTypes.Role);
 
     if (role == "Kid")
     {
-        // Kid can only see their tasks (ignore kidId query)
         var kidClaim = principal.FindFirstValue("kidId") ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
         if (string.IsNullOrWhiteSpace(kidClaim)) return Results.Unauthorized();
 
@@ -222,7 +235,6 @@ app.MapGet("/api/tasks", async (ClaimsPrincipal principal, AppDbContext db, stri
         return Results.Ok(tasks);
     }
 
-    // Parent path
     var parentId = principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
     if (string.IsNullOrWhiteSpace(parentId)) return Results.Unauthorized();
 
@@ -230,28 +242,25 @@ app.MapGet("/api/tasks", async (ClaimsPrincipal principal, AppDbContext db, stri
 
     if (!string.IsNullOrWhiteSpace(kidId))
     {
-        // only allow filtering to kid owned by parent
         var kidOwned = await db.Kids.AnyAsync(k => k.Id == kidId && k.ParentId == parentId);
         if (!kidOwned) return Results.BadRequest("Unknown kidId for this parent.");
         q = q.Where(t => t.AssignedKidId == kidId);
     }
     else
     {
-        // Only tasks created by this parent
         q = q.Where(t => t.CreatedByParentId == parentId);
     }
 
     return Results.Ok(await q.ToListAsync());
 })
-.RequireAuthorization(); // either Parent or Kid token
+.RequireAuthorization(); // Parent or Kid
 
 // Parent creates tasks; server sets CreatedByParentId
-app.MapPost("/api/tasks", async (ClaimsPrincipal principal, AppDbContext db, CreateTaskRequest req) =>
+api.MapPost("/tasks", async (ClaimsPrincipal principal, AppDbContext db, CreateTaskRequest req) =>
 {
     var parentId = principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
     if (string.IsNullOrWhiteSpace(parentId)) return Results.Unauthorized();
 
-    // kid must belong to this parent
     var kidExists = await db.Kids.AnyAsync(k => k.Id == req.AssignedKidId && k.ParentId == parentId);
     if (!kidExists) return Results.BadRequest("Unknown kidId for this parent.");
 
@@ -272,8 +281,8 @@ app.MapPost("/api/tasks", async (ClaimsPrincipal principal, AppDbContext db, Cre
 })
 .RequireAuthorization("ParentOnly");
 
-// Kid completes tasks; must be assigned to that kid
-app.MapPut("/api/tasks/{id:int}/complete", async (ClaimsPrincipal principal, AppDbContext db, int id) =>
+// Kid completes tasks
+api.MapPut("/tasks/{id:int}/complete", async (ClaimsPrincipal principal, AppDbContext db, int id) =>
 {
     var kidId = principal.FindFirstValue("kidId") ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
     if (string.IsNullOrWhiteSpace(kidId)) return Results.Unauthorized();
@@ -281,7 +290,7 @@ app.MapPut("/api/tasks/{id:int}/complete", async (ClaimsPrincipal principal, App
     var task = await db.Tasks.FirstOrDefaultAsync(t => t.Id == id && t.AssignedKidId == kidId);
     if (task is null) return Results.NotFound();
 
-    if (task.IsComplete) return Results.Ok(task); // no double points
+    if (task.IsComplete) return Results.Ok(task);
 
     task.IsComplete = true;
     task.CompletedAt = DateTime.UtcNow;
@@ -292,7 +301,7 @@ app.MapPut("/api/tasks/{id:int}/complete", async (ClaimsPrincipal principal, App
 .RequireAuthorization("KidOnly");
 
 // Parent deletes tasks they created
-app.MapDelete("/api/tasks/{id:int}", async (ClaimsPrincipal principal, AppDbContext db, int id) =>
+api.MapDelete("/tasks/{id:int}", async (ClaimsPrincipal principal, AppDbContext db, int id) =>
 {
     var parentId = principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
     if (string.IsNullOrWhiteSpace(parentId)) return Results.Unauthorized();
@@ -308,9 +317,8 @@ app.MapDelete("/api/tasks/{id:int}", async (ClaimsPrincipal principal, AppDbCont
 .RequireAuthorization("ParentOnly");
 
 // -------------------- Points --------------------
-// Kid token: returns their points
-// Parent token: can request points for a kid they own via ?kidId=
-app.MapGet("/api/points", async (ClaimsPrincipal principal, AppDbContext db, string? kidId) =>
+
+api.MapGet("/points", async (ClaimsPrincipal principal, AppDbContext db, string? kidId) =>
 {
     var role = principal.FindFirstValue(ClaimTypes.Role);
 
@@ -343,17 +351,18 @@ app.MapGet("/api/points", async (ClaimsPrincipal principal, AppDbContext db, str
 
     return Results.Ok(new { kidId = effectiveKidId, points = earned - spent });
 })
-.RequireAuthorization(); // Parent or Kid token
+.RequireAuthorization(); // Parent or Kid
 
 // -------------------- Rewards + Redemptions --------------------
 
-// Everyone can view rewards (both Parent and Kid)
-app.MapGet("/api/rewards", async (AppDbContext db) =>
+// Everyone can view rewards
+api.MapGet("/rewards", async (AppDbContext db) =>
     Results.Ok(await db.Rewards.ToListAsync())
-);
+)
+.RequireAuthorization(); // Parent or Kid (if you want public, change to .AllowAnonymous())
 
 // Parent creates rewards
-app.MapPost("/api/rewards", async (AppDbContext db, CreateRewardRequest req) =>
+api.MapPost("/rewards", async (AppDbContext db, CreateRewardRequest req) =>
 {
     var reward = new Reward { Name = req.Name, Cost = req.Cost };
     db.Rewards.Add(reward);
@@ -363,8 +372,8 @@ app.MapPost("/api/rewards", async (AppDbContext db, CreateRewardRequest req) =>
 })
 .RequireAuthorization("ParentOnly");
 
-// Kid redeems a reward for themselves (no kidId querystring)
-app.MapPost("/api/rewards/{rewardId:int}/redeem", async (ClaimsPrincipal principal, AppDbContext db, int rewardId) =>
+// Kid redeems a reward
+api.MapPost("/rewards/{rewardId:int}/redeem", async (ClaimsPrincipal principal, AppDbContext db, int rewardId) =>
 {
     var kidId = principal.FindFirstValue("kidId") ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
     if (string.IsNullOrWhiteSpace(kidId)) return Results.Unauthorized();
@@ -398,13 +407,15 @@ app.MapPost("/api/rewards/{rewardId:int}/redeem", async (ClaimsPrincipal princip
 })
 .RequireAuthorization("KidOnly");
 
-// -------------------- Todos (NOW PERSISTENT) --------------------
-// Keep as-is. If you want, you can later lock these behind ParentOnly.
-app.MapGet("/api/todos", async (AppDbContext db) =>
-    Results.Ok(await db.Todos.OrderBy(t => t.Id).ToListAsync())
-);
+// -------------------- Todos --------------------
 
-app.MapPost("/api/todos", async (AppDbContext db, TodoItem todo) =>
+// Everyone can view todos (you can lock later if desired)
+api.MapGet("/todos", async (AppDbContext db) =>
+    Results.Ok(await db.Todos.OrderBy(t => t.Id).ToListAsync())
+)
+.RequireAuthorization(); // Parent or Kid (or change to .AllowAnonymous())
+
+api.MapPost("/todos", async (AppDbContext db, TodoItem todo) =>
 {
     todo.Id = 0; // let SQLite autoincrement
     db.Todos.Add(todo);
@@ -412,7 +423,7 @@ app.MapPost("/api/todos", async (AppDbContext db, TodoItem todo) =>
     return Results.Created($"/api/todos/{todo.Id}", todo);
 });
 
-app.MapPut("/api/todos/{id:int}", async (AppDbContext db, int id, TodoItem updated) =>
+api.MapPut("/todos/{id:int}", async (AppDbContext db, int id, TodoItem updated) =>
 {
     var todo = await db.Todos.FirstOrDefaultAsync(t => t.Id == id);
     if (todo is null) return Results.NotFound();
@@ -424,7 +435,7 @@ app.MapPut("/api/todos/{id:int}", async (AppDbContext db, int id, TodoItem updat
     return Results.Ok(todo);
 });
 
-app.MapDelete("/api/todos/{id:int}", async (AppDbContext db, int id) =>
+api.MapDelete("/todos/{id:int}", async (AppDbContext db, int id) =>
 {
     var todo = await db.Todos.FirstOrDefaultAsync(t => t.Id == id);
     if (todo is null) return Results.NotFound();
