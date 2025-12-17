@@ -1,0 +1,23 @@
+# Node
+node_modules/
+web/node_modules/
+
+# Vite/React build output
+dist/
+web/dist/
+
+# Env files
+.env
+.env.*
+web/.env.local
+
+# .NET
+bin/
+obj/
+**/bin/
+**/obj/
+
+# SQLite db
+*.db
+*.db-shm
+*.db-wal

@@ -1,34 +1,37 @@
-const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+import axios from "axios";
+import type {
+  KidProfile,
+  KidTask,
+  Reward,
+  PointsResponse,
+  CreateTaskRequest,
+  CreateRewardRequest
+} from "./types";
 
-export type Todo = { id:number; title:string; isDone:boolean };
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL,
+});
 
-export async function getTodos(): Promise<Todo[]> {
-  const res = await fetch(`${baseUrl}/api/todos`);
-  if (!res.ok) throw new Error('Failed to fetch todos');
-  return res.json();
-}
+export const getKids = async () =>
+  (await api.get<KidProfile[]>("/api/kids")).data;
 
-export async function addTodo(title: string): Promise<Todo> {
-  const res = await fetch(`${baseUrl}/api/todos`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, isDone: false })
-  });
-  if (!res.ok) throw new Error('Failed to add todo');
-  return res.json();
-}
+export const getTasks = async (kidId: string) =>
+  (await api.get<KidTask[]>("/api/tasks", { params: { kidId } })).data;
 
-export async function updateTodo(todo: Todo): Promise<Todo> {
-  const res = await fetch(`${baseUrl}/api/todos/${todo.id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(todo)
-  });
-  if (!res.ok) throw new Error('Failed to update todo');
-  return res.json();
-}
+export const completeTask = async (id: number) =>
+  (await api.put<KidTask>(`/api/tasks/${id}/complete`)).data;
 
-export async function deleteTodo(id: number): Promise<void> {
-  const res = await fetch(`${baseUrl}/api/todos/${id}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error('Failed to delete todo');
-}
+export const getPoints = async (kidId: string) =>
+  (await api.get<PointsResponse>("/api/points", { params: { kidId } })).data;
+
+export const getRewards = async () =>
+  (await api.get<Reward[]>("/api/rewards")).data;
+
+export const redeemReward = async (rewardId: number, kidId: string) =>
+  api.post(`/api/rewards/${rewardId}/redeem`, null, { params: { kidId } });
+
+export const createTask = async (payload: CreateTaskRequest) =>
+  (await api.post<KidTask>("/api/tasks", payload)).data;
+
+export const createReward = async (payload: CreateRewardRequest) =>
+  (await api.post<Reward>("/api/rewards", payload)).data;
