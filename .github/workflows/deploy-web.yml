@@ -2,7 +2,7 @@ name: Deploy web to GitHub Pages
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch: {}
 
 permissions:
@@ -32,7 +32,7 @@ jobs:
       - name: Install dependencies and build
         working-directory: ./web
         env:
-          VITE_API_URL: "https://microsoft-fullstack-sample.onrender.com"
+          VITE_API_BASE: "https://microsoft-fullstack-sample.onrender.com"
         run: |
           echo "Node version:"
           node -v
