@@ -64,7 +64,8 @@ The architecture mirrors common Microsoft full-stack patterns used in real-world
 
 ## 📸 Screenshot
 
-<img width="819" height="343" alt="Microsoft Fullstack Sample Screenshot" src="https://github.com/user-attachments/assets/f7c9893c-51e7-4545-b2df-8c55986a50ae" />
+<img width="2542" height="1267" alt="image" src="https://github.com/user-attachments/assets/db191f34-5569-453c-99e6-e1e99682ef37" />
+
 
 ---
 
