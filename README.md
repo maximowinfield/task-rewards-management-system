@@ -161,12 +161,14 @@ Locally, the same requirement applies when running the API.
 
 If the secret is too short, the API will throw a runtime exception during login token creation, resulting in a 500 Internal Server Error.
 
-Required Environment Variable
+## Required Environment Variable
+
 
 Backend:
+```
 
 JWT_SECRET=your-secure-secret-at-least-32-characters-long
-
+```
 
 This variable must be set:
 
@@ -174,7 +176,7 @@ Locally (via environment variables or configuration)
 
 In Render’s Environment settings for production
 
-CORS & Cross-Origin Requests
+## CORS & Cross-Origin Requests
 
 Because the frontend and backend are hosted on different origins:
 
