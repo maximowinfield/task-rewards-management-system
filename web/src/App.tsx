@@ -14,15 +14,29 @@ export default function App() {
   const isKid = !!auth?.kidToken;
 
   // Option A: kidId in the URL
-  const parentKidId = auth?.kidId;
+  const parentKidId = auth?.selectedKidId;
 
-  function switchToParent() {
-    setAuth((prev: any) => ({ ...prev, activeRole: "Parent" }));
-  }
+  function clearAuth() {
+  setAuth({
+    parentToken: null,
+    kidToken: null,
+    activeRole: null,
+    kidId: undefined,
+    kidName: undefined,
+    selectedKidId: undefined,
+    selectedKidName: undefined,
+  });
+}
 
-  function switchToKid() {
-    setAuth((prev: any) => ({ ...prev, activeRole: "Kid" }));
-  }
+
+function switchToParent() {
+  setAuth((prev) => (prev.parentToken ? { ...prev, activeRole: "Parent" } : prev));
+}
+
+function switchToKid() {
+  setAuth((prev) => (prev.kidToken ? { ...prev, activeRole: "Kid" } : prev));
+}
+
 
   return (
     <div style={{ minHeight: "100vh", fontFamily: "system-ui", color: "#fff" }}>
