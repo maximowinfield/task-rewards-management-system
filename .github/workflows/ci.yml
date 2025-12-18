@@ -21,13 +21,13 @@ jobs:
           dotnet-version: "8.0.x"
 
       - name: Restore
-        run: dotnet restore ./msfullstacksample.api.csproj
+        run: dotnet restore ./MsFullstackSample.Api.csproj
 
       - name: Build
-        run: dotnet build ./msfullstacksample.api.csproj --configuration Release --no-restore
+        run: dotnet build ./MsFullstackSample.Api.csproj --configuration Release --no-restore
 
       - name: Publish
-        run: dotnet publish ./msfullstacksample.api.csproj -c Release --no-build -o out
+        run: dotnet publish ./MsFullstackSample.Api.csproj -c Release --no-build -o out
 
   web:
     runs-on: ubuntu-latest
