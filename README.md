@@ -4,6 +4,9 @@
 A modern full-stack application demonstrating Microsoft’s ecosystem end-to-end.  
 This project evolved from a simple todo app into a **persistent kids task and rewards system**, showcasing real-world frontend routing, backend persistence, and cloud deployment.
 
+###User: parent1
+###Password: ChangeMe123!
+
 ---
 
 ## 🚀 Live Demo
