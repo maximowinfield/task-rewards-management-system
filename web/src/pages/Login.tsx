@@ -10,18 +10,27 @@ export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
-  async function login() {
-    try {
-      const data = await parentLogin({ username, password });
+async function login() {
+  try {
+    const data = await parentLogin({ username, password });
 
-      setApiToken(data.token);
-      setAuth({ token: data.token, role: "Parent" });
+    setAuth((prev: any) => ({
+      ...prev,
+      parentToken: data.token,
+      activeRole: "Parent",
 
-      navigate("/select-kid");
-    } catch (err: any) {
-      alert(err?.message || "Login failed");
-    }
+      // optional: if switching accounts, clear kid mode
+      kidToken: null,
+      kidId: undefined,
+      kidName: undefined,
+    }));
+
+    navigate("/parent/kids", { replace: true });
+  } catch (err: any) {
+    alert(err?.message || "Login failed");
   }
+}
+
 
   return (
     <div>

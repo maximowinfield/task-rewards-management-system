@@ -12,6 +12,8 @@ using System.IdentityModel.Tokens.Jwt;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 
+// ✅ Type declarations MUST be before top-level statements (fixes CS8803)
+
 var builder = WebApplication.CreateBuilder(args);
 
 // CORS Policy: allow dev origins (adjust for production)
@@ -233,6 +235,48 @@ api.MapGet("/kids", async (ClaimsPrincipal principal, AppDbContext db) =>
 })
 .RequireAuthorization("ParentOnly");
 
+// ✅ Parent adds a kid
+api.MapPost("/kids", async (ClaimsPrincipal principal, AppDbContext db, CreateKidRequest req) =>
+{
+    var parentId = GetUserId(principal);
+    if (string.IsNullOrWhiteSpace(parentId)) return Results.Unauthorized();
+
+    var name = (req.DisplayName ?? "").Trim();
+    if (string.IsNullOrWhiteSpace(name)) return Results.BadRequest("DisplayName is required.");
+
+    var kid = new KidProfile
+    {
+        Id = Guid.NewGuid().ToString(),
+        ParentId = parentId,
+        DisplayName = name
+    };
+
+    db.Kids.Add(kid);
+    await db.SaveChangesAsync();
+
+    return Results.Created($"/api/kids/{kid.Id}", kid);
+})
+.RequireAuthorization("ParentOnly");
+
+// ✅ Parent renames a kid (edit Kid 1 / Kid 2 names)
+api.MapPut("/kids/{kidId}", async (ClaimsPrincipal principal, AppDbContext db, string kidId, UpdateKidRequest req) =>
+{
+    var parentId = GetUserId(principal);
+    if (string.IsNullOrWhiteSpace(parentId)) return Results.Unauthorized();
+
+    var name = (req.DisplayName ?? "").Trim();
+    if (string.IsNullOrWhiteSpace(name)) return Results.BadRequest("DisplayName is required.");
+
+    var kid = await db.Kids.FirstOrDefaultAsync(k => k.Id == kidId && k.ParentId == parentId);
+    if (kid is null) return Results.NotFound("Kid not found for this parent.");
+
+    kid.DisplayName = name;
+    await db.SaveChangesAsync();
+
+    return Results.Ok(kid);
+})
+.RequireAuthorization("ParentOnly");
+
 // -------------------- Tasks --------------------
 
 // Parent can view tasks (optionally filter by kidId, but only if kid belongs to parent)
@@ -374,7 +418,7 @@ api.MapGet("/points", async (ClaimsPrincipal principal, AppDbContext db, string?
 api.MapGet("/rewards", async (AppDbContext db) =>
     Results.Ok(await db.Rewards.ToListAsync())
 )
-.RequireAuthorization(); // Parent or Kid (if you want public, change to .AllowAnonymous())
+.RequireAuthorization(); // Parent or Kid
 
 // Parent creates rewards
 api.MapPost("/rewards", async (AppDbContext db, CreateRewardRequest req) =>
@@ -428,7 +472,7 @@ api.MapPost("/rewards/{rewardId:int}/redeem", async (ClaimsPrincipal principal, 
 api.MapGet("/todos", async (AppDbContext db) =>
     Results.Ok(await db.Todos.OrderBy(t => t.Id).ToListAsync())
 )
-.RequireAuthorization(); // Parent or Kid (or change to .AllowAnonymous())
+.RequireAuthorization(); // Parent or Kid
 
 api.MapPost("/todos", async (AppDbContext db, TodoItem todo) =>
 {

@@ -1,40 +1,53 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { setApiToken } from "../api";
 
 type Role = "Parent" | "Kid";
 
-interface AuthState {
-  token: string | null;
-  role: Role | null;
+export interface AuthState {
+  parentToken: string | null;
+  kidToken: string | null;
+  activeRole: Role | null;
+
+  kidId?: string;
   kidName?: string;
+
+  // ✅ Parent can “select a kid” without becoming Kid
+  selectedKidId?: string;
+  selectedKidName?: string;
 }
 
-interface AuthContextType {
+type AuthContextValue = {
   auth: AuthState;
-  setAuth: (auth: AuthState) => void;
-  logout: () => void;
-}
+  setAuth: React.Dispatch<React.SetStateAction<AuthState>>;
+};
 
-const AuthContext = createContext<AuthContextType | null>(null);
+const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [auth, setAuth] = useState<AuthState>({
-    token: null,
-    role: null,
+    parentToken: null,
+    kidToken: null,
+    activeRole: null,
+    kidId: undefined,
+    kidName: undefined,
+    selectedKidId: undefined,
+    selectedKidName: undefined,
   });
 
-  // 🔑 Keep Axios Authorization header in sync with auth state
+  // ✅ Always point Axios at the token for the active role
   useEffect(() => {
-    setApiToken(auth.token ?? undefined);
-  }, [auth.token]);
+    const token =
+      auth.activeRole === "Parent"
+        ? auth.parentToken
+        : auth.activeRole === "Kid"
+        ? auth.kidToken
+        : null;
 
-  function logout() {
-    setAuth({ token: null, role: null });
-    setApiToken(undefined);
-  }
+    setApiToken(token ?? undefined);
+  }, [auth.activeRole, auth.parentToken, auth.kidToken]);
 
   return (
-    <AuthContext.Provider value={{ auth, setAuth, logout }}>
+    <AuthContext.Provider value={{ auth, setAuth }}>
       {children}
     </AuthContext.Provider>
   );
@@ -42,6 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export const useAuth = () => {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
+  if (!ctx) throw new Error("useAuth must be used inside <AuthProvider>");
   return ctx;
 };
+

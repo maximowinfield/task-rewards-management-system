@@ -68,6 +68,4 @@ public class TodoItem
     public bool IsDone { get; set; }
 }
 
-// Request DTOs (fine as records)
-public record CreateTaskRequest(string Title, int Points, string AssignedKidId);
-public record CreateRewardRequest(string Name, int Cost);
+

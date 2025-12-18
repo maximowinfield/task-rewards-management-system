@@ -1,27 +1,28 @@
 import { Navigate } from "react-router-dom";
-import { ReactNode } from "react";
 import { useAuth } from "../context/AuthContext";
 
 type Role = "Parent" | "Kid";
 
-interface RequireRoleProps {
-  role: Role;
-  children: ReactNode;
-}
-
-export default function RequireRole({ role, children }: RequireRoleProps) {
+export default function RequireRole({
+  role,
+  allow,
+  children,
+}: {
+  role?: Role;
+  allow?: Role[];
+  children: JSX.Element;
+}) {
   const { auth } = useAuth();
+  const allowed: Role[] = allow ?? (role ? [role] : ["Parent", "Kid"]);
 
-  // Not logged in at all
-  if (!auth.token) {
-    return <Navigate to="/login" replace />;
-  }
+  const hasParent = !!auth?.parentToken;
+  const hasKid = !!auth?.kidToken;
 
-  // Logged in, but wrong role
-  if (auth.role !== role) {
-    return <Navigate to="/login" replace />;
-  }
+  // If route allows Parent and we have parentToken -> OK
+  if (allowed.includes("Parent") && hasParent) return children;
 
-  // Authorized
-  return <>{children}</>;
+  // If route allows Kid and we have kidToken -> OK
+  if (allowed.includes("Kid") && hasKid) return children;
+
+  return <Navigate to="/login" replace />;
 }
