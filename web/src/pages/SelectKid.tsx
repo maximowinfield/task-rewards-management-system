@@ -21,15 +21,15 @@ export default function SelectKid() {
   }, []);
 
   function setCurrentKid(kidId: string, kidName: string) {
-    // ✅ stay Parent, just set which kid the parent is viewing/managing
+    // ✅ Parent selection (NOT kid session)
     setAuth((prev: any) => ({
       ...prev,
-      kidId,
-      kidName,
+      selectedKidId: kidId,
+      selectedKidName: kidName,
       activeRole: "Parent",
     }));
 
-    navigate("/parent/kids", { replace: true });
+    navigate(`/parent/kids/${kidId}`, { replace: true });
   }
 
   async function enterKidMode(kidId: string) {
@@ -43,6 +43,11 @@ export default function SelectKid() {
       kidToken: data.token,
       kidId: data.kidId,
       kidName: data.displayName,
+
+      // optional but helpful: remember what kid parent was viewing
+      selectedKidId: data.kidId,
+      selectedKidName: data.displayName,
+
       activeRole: "Kid",
     }));
 
@@ -80,21 +85,13 @@ export default function SelectKid() {
                 <div style={{ fontSize: 12, opacity: 0.8 }}>{k.id}</div>
               </div>
 
-{/* ✅ Parent action */}
-<button
-  onClick={() => {
-    setCurrentKid(k.id, k.displayName);       // keep this if you want to store name/id in context
-    navigate(`/parent/kids/${k.id}`);         // ✅ Option A: kidId in URL
-  }}
->
-  View as Parent
-</button>
-
+              {/* ✅ Parent action */}
+              <button onClick={() => setCurrentKid(k.id, k.displayName)}>
+                View as Parent
+              </button>
 
               {/* ✅ Kid action */}
-              <button onClick={() => enterKidMode(k.id)}>
-                Enter Kid Mode
-              </button>
+              <button onClick={() => enterKidMode(k.id)}>Enter Kid Mode</button>
             </div>
           ))}
         </div>
