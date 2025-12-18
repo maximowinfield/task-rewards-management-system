@@ -11,7 +11,6 @@ export interface AuthState {
   kidId?: string;
   kidName?: string;
 
-  // ✅ Parent can “select a kid” without becoming Kid
   selectedKidId?: string;
   selectedKidName?: string;
 }
@@ -23,34 +22,82 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const STORAGE_KEY = "kidsrewards.auth.v1";
+
+function getTokenForRole(a: AuthState) {
+  if (a.activeRole === "Parent") return a.parentToken ?? undefined;
+  if (a.activeRole === "Kid") return a.kidToken ?? undefined;
+  return undefined;
+}
+
+function loadAuth(): AuthState {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return {
+        parentToken: null,
+        kidToken: null,
+        activeRole: null,
+        kidId: undefined,
+        kidName: undefined,
+        selectedKidId: undefined,
+        selectedKidName: undefined,
+      };
+    }
+
+    const parsed = JSON.parse(raw) as Partial<AuthState>;
+
+    // ✅ If activeRole is missing in older saved data, default sensibly
+    const activeRole: Role | null =
+      (parsed.activeRole as Role | null) ??
+      (parsed.parentToken ? "Parent" : parsed.kidToken ? "Kid" : null);
+
+    return {
+      parentToken: parsed.parentToken ?? null,
+      kidToken: parsed.kidToken ?? null,
+      activeRole,
+      kidId: parsed.kidId,
+      kidName: parsed.kidName,
+      selectedKidId: parsed.selectedKidId,
+      selectedKidName: parsed.selectedKidName,
+    };
+  } catch {
+    localStorage.removeItem(STORAGE_KEY);
+    return {
+      parentToken: null,
+      kidToken: null,
+      activeRole: null,
+      kidId: undefined,
+      kidName: undefined,
+      selectedKidId: undefined,
+      selectedKidName: undefined,
+    };
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [auth, setAuth] = useState<AuthState>({
-    parentToken: null,
-    kidToken: null,
-    activeRole: null,
-    kidId: undefined,
-    kidName: undefined,
-    selectedKidId: undefined,
-    selectedKidName: undefined,
+  // ✅ Load auth AND immediately set axios token during initialization
+  const [auth, setAuth] = useState<AuthState>(() => {
+    const initial = loadAuth();
+    setApiToken(getTokenForRole(initial));
+    return initial;
   });
 
-  // ✅ Always point Axios at the token for the active role
+  // ✅ Persist auth changes
   useEffect(() => {
-    const token =
-      auth.activeRole === "Parent"
-        ? auth.parentToken
-        : auth.activeRole === "Kid"
-        ? auth.kidToken
-        : null;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
+    } catch {
+      // ignore storage errors
+    }
+  }, [auth]);
 
-    setApiToken(token ?? undefined);
+  // ✅ Keep axios token in sync when role/tokens change
+  useEffect(() => {
+    setApiToken(getTokenForRole(auth));
   }, [auth.activeRole, auth.parentToken, auth.kidToken]);
 
-  return (
-    <AuthContext.Provider value={{ auth, setAuth }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={{ auth, setAuth }}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => {
@@ -58,4 +105,3 @@ export const useAuth = () => {
   if (!ctx) throw new Error("useAuth must be used inside <AuthProvider>");
   return ctx;
 };
-
