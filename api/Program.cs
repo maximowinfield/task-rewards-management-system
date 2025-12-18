@@ -45,7 +45,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // Password hashing (lightweight, no full Identity stack)
 builder.Services.AddScoped<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>();
 
-// JWT Auth (Option B: Parent login + Kid session token)
+// JWT Auth
 var jwtSecret =
     builder.Configuration["JWT_SECRET"]
     ?? "dev-only-secret-change-me-32chars-minimum!!"; // 32+ chars
@@ -79,11 +79,10 @@ var app = builder.Build();
 
 app.MapGet("/__version", () => Results.Text("CORS-GROUP-V1")).AllowAnonymous();
 
-// -------------------- ✅ SPA Static Files (single-domain hosting) --------------------
+// -------------------- ✅ SPA Static Files --------------------
 app.UseDefaultFiles();
 app.UseStaticFiles();
-// -----------------------------------------------------------------------------
-
+// ------------------------------------------------------------
 
 // Routing + Middleware order matters
 app.UseRouting();
@@ -95,8 +94,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 // All /api routes go through this group
-var api = app.MapGroup("/api")
-    .RequireCors("Frontend");
+var api = app.MapGroup("/api").RequireCors("Frontend");
 
 // Preflight handler for anything under /api/*
 api.MapMethods("/{*path}", new[] { "OPTIONS" }, () => Results.Ok())
@@ -135,7 +133,7 @@ string CreateToken(string subjectId, string role, string? kidId = null, string? 
     return new JwtSecurityTokenHandler().WriteToken(token);
 }
 
-// -------------------- ✅ Database migrate + deterministic seed --------------------
+// -------------------- ✅ Database migrate + seed (safe) --------------------
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -218,14 +216,12 @@ using (var scope = app.Services.CreateScope())
 }
 // -------------------------------------------------------------------------------
 
-
 // Health
 api.MapGet("/health", () => Results.Ok(new { status = "ok" }))
    .AllowAnonymous();
 
-// -------------------- Auth (Option B) --------------------
+// -------------------- Auth --------------------
 
-// Parent login: returns Parent token
 api.MapPost("/parent/login", async (AppDbContext db, IPasswordHasher<AppUser> hasher, ParentLoginRequest req) =>
 {
     var user = await db.Users.FirstOrDefaultAsync(u => u.Username == req.Username && u.Role == "Parent");
@@ -239,7 +235,6 @@ api.MapPost("/parent/login", async (AppDbContext db, IPasswordHasher<AppUser> ha
 })
 .AllowAnonymous();
 
-// Parent enters Kid Mode: returns Kid token scoped to a kid profile
 api.MapPost("/kid-session", async (ClaimsPrincipal principal, AppDbContext db, KidSessionRequest req) =>
 {
     var parentId = GetUserId(principal);
@@ -255,7 +250,6 @@ api.MapPost("/kid-session", async (ClaimsPrincipal principal, AppDbContext db, K
 
 // -------------------- Kids --------------------
 
-// Parent sees only their kids
 api.MapGet("/kids", async (ClaimsPrincipal principal, AppDbContext db) =>
 {
     var parentId = GetUserId(principal);
@@ -266,7 +260,6 @@ api.MapGet("/kids", async (ClaimsPrincipal principal, AppDbContext db) =>
 })
 .RequireAuthorization("ParentOnly");
 
-// Parent adds a kid
 api.MapPost("/kids", async (ClaimsPrincipal principal, AppDbContext db, CreateKidRequest req) =>
 {
     var parentId = GetUserId(principal);
@@ -289,7 +282,6 @@ api.MapPost("/kids", async (ClaimsPrincipal principal, AppDbContext db, CreateKi
 })
 .RequireAuthorization("ParentOnly");
 
-// Parent renames a kid
 api.MapPut("/kids/{kidId}", async (ClaimsPrincipal principal, AppDbContext db, string kidId, UpdateKidRequest req) =>
 {
     var parentId = GetUserId(principal);
@@ -310,7 +302,6 @@ api.MapPut("/kids/{kidId}", async (ClaimsPrincipal principal, AppDbContext db, s
 
 // -------------------- Tasks --------------------
 
-// Parent can view tasks (optional kidId filter); Kid can view only their tasks
 api.MapGet("/tasks", async (ClaimsPrincipal principal, AppDbContext db, string? kidId) =>
 {
     var role = principal.FindFirstValue(ClaimTypes.Role);
@@ -344,7 +335,6 @@ api.MapGet("/tasks", async (ClaimsPrincipal principal, AppDbContext db, string? 
 })
 .RequireAuthorization();
 
-// Parent creates tasks
 api.MapPost("/tasks", async (ClaimsPrincipal principal, AppDbContext db, CreateTaskRequest req) =>
 {
     var parentId = GetUserId(principal);
@@ -370,7 +360,31 @@ api.MapPost("/tasks", async (ClaimsPrincipal principal, AppDbContext db, CreateT
 })
 .RequireAuthorization("ParentOnly");
 
-// Kid completes tasks
+// ✅ NEW: Parent edits a task (title/points/assigned kid)
+api.MapPut("/tasks/{id:int}", async (ClaimsPrincipal principal, AppDbContext db, int id, UpdateTaskRequest req) =>
+{
+    var parentId = GetUserId(principal);
+    if (string.IsNullOrWhiteSpace(parentId)) return Results.Unauthorized();
+
+    var task = await db.Tasks.FirstOrDefaultAsync(t => t.Id == id && t.CreatedByParentId == parentId);
+    if (task is null) return Results.NotFound();
+
+    // If reassigning, ensure kid belongs to this parent
+    if (!string.IsNullOrWhiteSpace(req.AssignedKidId))
+    {
+        var kidOwned = await db.Kids.AnyAsync(k => k.Id == req.AssignedKidId && k.ParentId == parentId);
+        if (!kidOwned) return Results.BadRequest("Unknown kidId for this parent.");
+        task.AssignedKidId = req.AssignedKidId;
+    }
+
+    task.Title = (req.Title ?? task.Title).Trim();
+    task.Points = req.Points ?? task.Points;
+
+    await db.SaveChangesAsync();
+    return Results.Ok(task);
+})
+.RequireAuthorization("ParentOnly");
+
 api.MapPut("/tasks/{id:int}/complete", async (ClaimsPrincipal principal, AppDbContext db, int id) =>
 {
     var kidId = principal.FindFirstValue("kidId") ?? GetUserId(principal);
@@ -389,7 +403,6 @@ api.MapPut("/tasks/{id:int}/complete", async (ClaimsPrincipal principal, AppDbCo
 })
 .RequireAuthorization("KidOnly");
 
-// Parent deletes tasks they created
 api.MapDelete("/tasks/{id:int}", async (ClaimsPrincipal principal, AppDbContext db, int id) =>
 {
     var parentId = GetUserId(principal);
@@ -444,13 +457,11 @@ api.MapGet("/points", async (ClaimsPrincipal principal, AppDbContext db, string?
 
 // -------------------- Rewards + Redemptions --------------------
 
-// Everyone can view rewards
 api.MapGet("/rewards", async (AppDbContext db) =>
     Results.Ok(await db.Rewards.ToListAsync())
 )
 .RequireAuthorization();
 
-// Parent creates rewards
 api.MapPost("/rewards", async (AppDbContext db, CreateRewardRequest req) =>
 {
     var reward = new Reward { Name = req.Name, Cost = req.Cost };
@@ -458,6 +469,32 @@ api.MapPost("/rewards", async (AppDbContext db, CreateRewardRequest req) =>
     await db.SaveChangesAsync();
 
     return Results.Created($"/api/rewards/{reward.Id}", reward);
+})
+.RequireAuthorization("ParentOnly");
+
+// ✅ NEW: Parent edits a reward
+api.MapPut("/rewards/{id:int}", async (AppDbContext db, int id, UpdateRewardRequest req) =>
+{
+    var reward = await db.Rewards.FirstOrDefaultAsync(r => r.Id == id);
+    if (reward is null) return Results.NotFound();
+
+    reward.Name = (req.Name ?? reward.Name).Trim();
+    reward.Cost = req.Cost ?? reward.Cost;
+
+    await db.SaveChangesAsync();
+    return Results.Ok(reward);
+})
+.RequireAuthorization("ParentOnly");
+
+// ✅ NEW: Parent deletes a reward
+api.MapDelete("/rewards/{id:int}", async (AppDbContext db, int id) =>
+{
+    var reward = await db.Rewards.FirstOrDefaultAsync(r => r.Id == id);
+    if (reward is null) return Results.NotFound();
+
+    db.Rewards.Remove(reward);
+    await db.SaveChangesAsync();
+    return Results.NoContent();
 })
 .RequireAuthorization("ParentOnly");
 
@@ -537,3 +574,11 @@ api.MapDelete("/todos/{id:int}", async (AppDbContext db, int id) =>
 app.MapFallbackToFile("index.html");
 
 app.Run();
+
+
+// -------------------- Request DTOs --------------------
+// Put these in the same file if you don't have them elsewhere.
+// If they already exist, DO NOT duplicate them.
+
+public record UpdateTaskRequest(string? Title, int? Points, string? AssignedKidId);
+public record UpdateRewardRequest(string? Name, int? Cost);
