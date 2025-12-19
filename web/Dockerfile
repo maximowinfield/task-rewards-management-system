@@ -49,13 +49,11 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
 COPY --from=api-build /app/publish ./
 
-# Render sets PORT; ASP.NET must listen on it
+# Render provides PORT at runtime
 ENV ASPNETCORE_URLS=http://0.0.0.0:${PORT}
+
+# Optional: documents the default Render port (not required, but fine)
 EXPOSE 10000
 
-CMD ["dotnet", "api.dll"]
-
-EXPOSE 8080
-ENV ASPNETCORE_URLS=http://0.0.0.0:8080
-
 ENTRYPOINT ["dotnet", "MsFullstackSample.Api.dll"]
+
