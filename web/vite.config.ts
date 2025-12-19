@@ -3,5 +3,5 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
-  base: "/", // ✅ single-domain (API serves SPA)
+  base: "/Microsoft-Fullstack-Sample/", // ✅ single-domain (API serves SPA)
 });
