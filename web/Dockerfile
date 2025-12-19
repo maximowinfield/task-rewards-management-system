@@ -31,7 +31,7 @@ WORKDIR /src
 
 # copy API csproj first for better caching
 COPY api/*.csproj ./api/
-RUN dotnet restore ./api
+RUN dotnet restore ./api/MsFullstackSample.Api.csproj
 
 # copy the rest of the API source
 COPY api/ ./api/
@@ -39,8 +39,9 @@ COPY api/ ./api/
 # copy built React dist into api/wwwroot
 COPY --from=web-build /src/web/dist ./api/wwwroot/
 
-# publish
-RUN dotnet publish ./api -c Release -o /app/publish
+# publish (SPECIFY THE PROJECT FILE)
+RUN dotnet publish ./api/MsFullstackSample.Api.csproj -c Release -o /app/publish
+
 
 
 # ---------- 3) Runtime image ----------
