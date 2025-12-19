@@ -27,8 +27,7 @@ export default function KidsRewardsPage() {
     if (auth?.parentToken && auth?.activeRole !== "Parent") {
       setAuth((prev: any) => ({ ...prev, activeRole: "Parent" }));
     }
-  }, [auth?.parentToken]);
-
+  }, [auth?.parentToken, auth?.activeRole, setAuth]);
 
   const [tasks, setTasks] = useState<KidTask[]>([]);
   const [points, setPoints] = useState<number>(0);
