@@ -349,7 +349,7 @@ async function onDeleteReward(id: number) {
   </div>
 
   {/* Right side actions */}
-{!!auth?.parentToken ? (
+{auth?.activeRole === "Parent" ? (
     editingTaskId === t.id ? (
       <div style={{ display: "flex", gap: 8 }}>
         <button onClick={() => onSaveTask(t.id)} style={{ padding: "6px 10px", borderRadius: 8 }}>
@@ -425,7 +425,7 @@ async function onDeleteReward(id: number) {
     )}
   </div>
 
-  {!!auth?.parentToken ? (
+  {auth?.activeRole === "Parent" ? (
     editingRewardId === r.id ? (
       <div style={{ display: "flex", gap: 8 }}>
         <button onClick={() => onSaveReward(r.id)} style={{ padding: "6px 10px", borderRadius: 8 }}>
