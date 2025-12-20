@@ -125,35 +125,41 @@ return (
         <Link to="/login">Login</Link>
 
         {/* Mode toggle + logout */}
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-          {isAuthed && (
-            <>
-              <button
-                onClick={switchToKidMode}
-                style={{
-                  cursor: "pointer",
-                  opacity: isKidMode ? 0.7 : 1,
-                }}
-              >
-                Kid Mode
-              </button>
+<div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+  {!isAuthed && (
+    <Link to="/login" style={{ textDecoration: "none" }}>
+      <button style={{ cursor: "pointer" }}>Login</button>
+    </Link>
+  )}
 
-              <button
-                onClick={switchToParentMode}
-                style={{
-                  cursor: "pointer",
-                  opacity: isParentMode ? 0.7 : 1,
-                }}
-              >
-                Parent Mode
-              </button>
+  {isAuthed && (
+    <>
+      <button
+        onClick={switchToKidMode}
+        style={{
+          cursor: "pointer",
+          opacity: isKidMode ? 0.7 : 1,
+        }}
+      >
+        Kid Mode
+      </button>
 
-              <button onClick={clearAuth} style={{ cursor: "pointer" }}>
-                Logout
-              </button>
-            </>
-          )}
-        </div>
+      <button
+        onClick={switchToParentMode}
+        style={{
+          cursor: "pointer",
+          opacity: isParentMode ? 0.7 : 1,
+        }}
+      >
+        Parent Mode
+      </button>
+
+      <button onClick={clearAuth} style={{ cursor: "pointer" }}>
+        Logout
+      </button>
+    </>
+  )}
+</div>
       </div>
 
       <Routes>
