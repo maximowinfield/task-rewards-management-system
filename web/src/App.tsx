@@ -67,6 +67,7 @@ const dangerBtn: React.CSSProperties = {
   ...actionBtn,
   color: "#b91c1c",
   border: "1px solid rgba(185,28,28,0.4)",
+  opacity: 0.9,
 };
 
 
