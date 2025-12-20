@@ -53,6 +53,22 @@ const navPill: React.CSSProperties = {
 const navPillActive: React.CSSProperties = {
   background: theme.pillActiveBg,
 };
+// actionBtn dangerBtn style declarations
+const actionBtn: React.CSSProperties = {
+  padding: "6px 10px",
+  borderRadius: 10,
+  border: `1px solid rgba(148,163,184,0.35)`,
+  background: "transparent",
+  cursor: "pointer",
+  fontWeight: 600,
+};
+
+const dangerBtn: React.CSSProperties = {
+  ...actionBtn,
+  color: "#b91c1c",
+  border: "1px solid rgba(185,28,28,0.4)",
+};
+
 
 // shared button style
 const topBtn: React.CSSProperties = {
@@ -157,9 +173,10 @@ const topBtn: React.CSSProperties = {
   Parent Mode
 </button>
 
-              <button onClick={clearAuth} style={{ cursor: "pointer" }}>
-                Logout
-              </button>
+<button onClick={clearAuth} style={dangerBtn}>
+  Logout
+</button>
+
             </>
           )}
         </div>
