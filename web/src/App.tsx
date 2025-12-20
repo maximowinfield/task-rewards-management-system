@@ -2,9 +2,7 @@ import { Link, Routes, Route, Navigate } from "react-router-dom";
 import KidsRewardsPage from "./pages/KidsRewardsPage";
 import TodosPage from "./pages/TodosPage";
 import Login from "./pages/Login";
-import SelectKid from "./pages/SelectKid";
 import RequireRole from "./components/RequireRole";
-import KidDashboard from "./components/KidDashboard";
 import { useAuth } from "./context/AuthContext";
 
 export default function App() {
@@ -52,11 +50,10 @@ function switchToParent() {
         {/* Parent links */}
         {isParent && (
           <>
-            <Link to={parentKidId ? `/parent/kids/${parentKidId}` : "/select-kid"}>
+            <Link to={parentKidId ? `/parent/kids/${parentKidId}` : "/parent/kids"}>
               Kids + Rewards
             </Link>
             <Link to="/parent/todos">Todos</Link>
-            <Link to="/select-kid">Select Kid</Link>
           </>
         )}
 
@@ -83,7 +80,7 @@ function switchToParent() {
               parentKidId ? (
                 <Navigate to={`/parent/kids/${parentKidId}`} replace />
               ) : (
-                <Navigate to="/select-kid" replace />
+                <Navigate to="/parent/kids" replace />
               )
             ) : (
               <Navigate to="/login" replace />
@@ -93,14 +90,16 @@ function switchToParent() {
 
         <Route path="/login" element={<Login />} />
 
-        <Route
-          path="/select-kid"
-          element={
-            <RequireRole role="Parent">
-              <SelectKid />
-            </RequireRole>
-          }
-        />
+<Route
+  path="/parent/kids"
+  element={
+    <RequireRole role="Parent">
+      <KidsRewardsPage />
+    </RequireRole>
+  }
+/>
+
+
 
         {/* ✅ Option A route (kidId in URL) */}
         <Route

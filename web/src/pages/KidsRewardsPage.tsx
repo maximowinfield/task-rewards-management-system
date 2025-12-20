@@ -269,7 +269,8 @@ async function onDeleteReward(id: number) {
 
   // ✅ With Option A, if kidId is missing, route is invalid—send them to pick a kid
   if (!effectiveKidId) {
-    return <Navigate to="/select-kid" replace />;
+    return <Navigate to="/parent/kids" replace />;
+
   }
 
   return (
