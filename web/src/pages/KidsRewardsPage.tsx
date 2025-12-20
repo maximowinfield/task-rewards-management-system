@@ -16,11 +16,33 @@ import {
 } from "../api";
 
 import { useAuth } from "../context/AuthContext";
+import type React from "react";
+
 
 
 export default function KidsRewardsPage() {
   const { auth, setAuth } = useAuth();
   const { kidId } = useParams<{ kidId: string }>();
+
+    // ✅ Simple light/dark palette (fixes invisible light-mode styling)
+  const isDark =
+    typeof window !== "undefined" &&
+    window.matchMedia &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches;
+
+  const ui = {
+    bg: isDark ? "#0b0f19" : "#ffffff",
+    text: isDark ? "#e5e7eb" : "#111827",
+    card: isDark ? "#111827" : "#ffffff",
+    border: isDark ? "#253042" : "#e5e7eb",
+    subtleText: isDark ? "rgba(229,231,235,0.7)" : "rgba(17,24,39,0.7)",
+    link: isDark ? "#93c5fd" : "#2563eb",
+    buttonBg: isDark ? "#0b1220" : "#f9fafb",
+    buttonText: isDark ? "#e5e7eb" : "#111827",
+    dangerBg: isDark ? "#3a1212" : "#fff1f2",
+    dangerText: isDark ? "#fecaca" : "#9f1239",
+  };
+
 
   // ✅ Force Parent mode when visiting parent pages
   useEffect(() => {
@@ -196,7 +218,7 @@ async function onDeleteReward(id: number) {
     }
   }
 
-  async function onCreateTask(e: React.FormEvent) {
+  async function onCreateTask(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!effectiveKidId) return;
 
@@ -349,33 +371,89 @@ async function onDeleteReward(id: number) {
   </div>
 
   {/* Right side actions */}
-{auth?.activeRole === "Parent" ? (
-    editingTaskId === t.id ? (
-      <div style={{ display: "flex", gap: 8 }}>
-        <button onClick={() => onSaveTask(t.id)} style={{ padding: "6px 10px", borderRadius: 8 }}>
-          Save
-        </button>
-        <button onClick={cancelEditTask} style={{ padding: "6px 10px", borderRadius: 8 }}>
-          Cancel
-        </button>
-      </div>
+  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+    {/* Complete button (show for anyone if not complete) */}
+    {t.isComplete ? (
+      <span style={{ fontSize: 12, opacity: 0.7 }}>Completed</span>
     ) : (
-      <div style={{ display: "flex", gap: 8 }}>
-        <button onClick={() => startEditTask(t)} style={{ padding: "6px 10px", borderRadius: 8 }}>
-          Edit
-        </button>
-        <button onClick={() => onDeleteTask(t.id)} style={{ padding: "6px 10px", borderRadius: 8 }}>
-          Delete
-        </button>
-      </div>
-    )
-  ) : t.isComplete ? (
-    <span style={{ fontSize: 12, opacity: 0.7 }}>Completed</span>
-  ) : (
-    <button onClick={() => onCompleteTask(t.id)} style={{ padding: "6px 10px", borderRadius: 8 }}>
-      Complete
-    </button>
-  )}
+      <button
+        onClick={() => onCompleteTask(t.id)}
+        style={{
+          padding: "6px 10px",
+          borderRadius: 8,
+          border: `1px solid ${ui.border}`,
+          background: ui.buttonBg,
+          color: ui.buttonText,
+          cursor: "pointer",
+        }}
+      >
+        Complete
+      </button>
+    )}
+
+    {/* Parent controls */}
+    {auth?.activeRole === "Parent" &&
+      (editingTaskId === t.id ? (
+        <>
+          <button
+            onClick={() => onSaveTask(t.id)}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: `1px solid ${ui.border}`,
+              background: ui.buttonBg,
+              color: ui.buttonText,
+              cursor: "pointer",
+            }}
+          >
+            Save
+          </button>
+          <button
+            onClick={cancelEditTask}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: `1px solid ${ui.border}`,
+              background: ui.buttonBg,
+              color: ui.buttonText,
+              cursor: "pointer",
+            }}
+          >
+            Cancel
+          </button>
+        </>
+      ) : (
+        <>
+          <button
+            onClick={() => startEditTask(t)}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: `1px solid ${ui.border}`,
+              background: ui.buttonBg,
+              color: ui.buttonText,
+              cursor: "pointer",
+            }}
+          >
+            Edit
+          </button>
+          <button
+            onClick={() => onDeleteTask(t.id)}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: `1px solid ${ui.border}`,
+              background: ui.dangerBg,
+              color: ui.dangerText,
+              cursor: "pointer",
+            }}
+          >
+            Delete
+          </button>
+        </>
+      ))}
+  </div>
+
 </li>
 
             ))}
