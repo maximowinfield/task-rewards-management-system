@@ -5,7 +5,6 @@ type Role = "Parent" | "Kid";
 
 export interface AuthState {
   parentToken: string | null;
-  kidToken: string | null;
   activeRole: Role | null;
 
   kidId?: string;
@@ -24,37 +23,36 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const STORAGE_KEY = "kidsrewards.auth.v1";
 
-function getTokenForRole(a: AuthState) {
-  if (a.activeRole === "Parent") return a.parentToken ?? undefined;
-  if (a.activeRole === "Kid") return a.kidToken ?? undefined;
-  return undefined;
+// ✅ Single token for API calls (Kid mode is UI-only)
+function getApiToken(a: AuthState) {
+  return a.parentToken ?? undefined;
+}
+
+function emptyAuth(): AuthState {
+  return {
+    parentToken: null,
+    activeRole: null,
+    kidId: undefined,
+    kidName: undefined,
+    selectedKidId: undefined,
+    selectedKidName: undefined,
+  };
 }
 
 function loadAuth(): AuthState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return {
-        parentToken: null,
-        kidToken: null,
-        activeRole: null,
-        kidId: undefined,
-        kidName: undefined,
-        selectedKidId: undefined,
-        selectedKidName: undefined,
-      };
-    }
+    if (!raw) return emptyAuth();
 
     const parsed = JSON.parse(raw) as Partial<AuthState>;
 
     // ✅ If activeRole is missing in older saved data, default sensibly
     const activeRole: Role | null =
       (parsed.activeRole as Role | null) ??
-      (parsed.parentToken ? "Parent" : parsed.kidToken ? "Kid" : null);
+      (parsed.parentToken ? "Parent" : null);
 
     return {
       parentToken: parsed.parentToken ?? null,
-      kidToken: parsed.kidToken ?? null,
       activeRole,
       kidId: parsed.kidId,
       kidName: parsed.kidName,
@@ -63,15 +61,7 @@ function loadAuth(): AuthState {
     };
   } catch {
     localStorage.removeItem(STORAGE_KEY);
-    return {
-      parentToken: null,
-      kidToken: null,
-      activeRole: null,
-      kidId: undefined,
-      kidName: undefined,
-      selectedKidId: undefined,
-      selectedKidName: undefined,
-    };
+    return emptyAuth();
   }
 }
 
@@ -79,7 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ✅ Load auth AND immediately set axios token during initialization
   const [auth, setAuth] = useState<AuthState>(() => {
     const initial = loadAuth();
-    setApiToken(getTokenForRole(initial));
+    setApiToken(getApiToken(initial));
     return initial;
   });
 
@@ -92,10 +82,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [auth]);
 
-  // ✅ Keep axios token in sync when role/tokens change
+  // ✅ Keep axios token in sync when token changes
   useEffect(() => {
-    setApiToken(getTokenForRole(auth));
-  }, [auth.activeRole, auth.parentToken, auth.kidToken]);
+    setApiToken(getApiToken(auth));
+  }, [auth.parentToken]);
 
   return <AuthContext.Provider value={{ auth, setAuth }}>{children}</AuthContext.Provider>;
 }
