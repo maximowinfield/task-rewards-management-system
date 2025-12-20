@@ -13,8 +13,7 @@ This project evolved from a simple todo app into a **persistent kids task and re
 
 | Component | URL |
 |---------|-----|
-| **Frontend (GitHub Pages)** | https://maximowinfield.github.io/Microsoft-Fullstack-Sample/ |
-| **Backend API (Render)** | https://microsoft-fullstack-sample.onrender.com |
+| **Frontend (GitHub Pages)** | https://microsoft-fullstack-sample.onrender.com |
 
 > ⚠️ The API may take 3–5 seconds to wake up on first request (Render free tier).
 
