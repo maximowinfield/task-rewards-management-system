@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams, Navigate } from "react-router-dom";
+import { Link, useParams, Navigate, useNavigate } from "react-router-dom";
 import type { KidTask, Reward } from "../types";
 import {
   getTasks,
@@ -17,12 +17,21 @@ import {
 
 import { useAuth } from "../context/AuthContext";
 import type React from "react";
+import KidSelector from "../components/KidSelector";
+import type { KidProfile } from "../types";
+import { getKids } from "../api";
+
 
 
 
 export default function KidsRewardsPage() {
   const { auth, setAuth } = useAuth();
   const { kidId } = useParams<{ kidId: string }>();
+
+  const navigate = useNavigate();
+  const [kids, setKids] = useState<KidProfile[]>([]);
+  const [selectedKidId, setSelectedKidId] = useState<string>(auth?.selectedKidId ?? "");
+
 
     // ✅ Simple light/dark palette (fixes invisible light-mode styling)
   const isDark =
@@ -42,6 +51,33 @@ export default function KidsRewardsPage() {
     dangerBg: isDark ? "#3a1212" : "#fff1f2",
     dangerText: isDark ? "#fecaca" : "#9f1239",
   };
+
+useEffect(() => {
+  (async () => {
+    try {
+      // only load kids if parent is logged in
+      if (!auth?.parentToken) return;
+
+      const list = await getKids(); // must return KidProfile[]
+      setKids(list);
+
+      // default selection: auth selection OR first kid
+      if (!selectedKidId && list.length > 0) {
+        const first = String(list[0].id);
+        setSelectedKidId(first);
+        setAuth((prev: any) => ({ ...prev, selectedKidId: first, selectedKidName: list[0].displayName }));
+      }
+    } catch (e) {
+      console.error("getKids failed", e);
+    }
+  })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [auth?.parentToken]);
+
+
+  useEffect(() => {
+  if (auth?.selectedKidId) setSelectedKidId(auth.selectedKidId);
+}, [auth?.selectedKidId]);
 
 
   // ✅ Force Parent mode when visiting parent pages
@@ -173,13 +209,13 @@ async function onDeleteReward(id: number) {
         setLoading(true);
         setError(null);
 
-        // If no kidId in the URL, send parent to Select Kid
-        if (!effectiveKidId) {
-          setTasks([]);
-          setPoints(0);
-          setRewards(await getRewards());
-          return;
-        }
+
+if (!effectiveKidId) {
+  setLoading(false);
+  return;
+}
+
+
 
         await loadAll(effectiveKidId);
       } catch (e: any) {
@@ -267,11 +303,86 @@ async function onDeleteReward(id: number) {
 
   if (loading) return <p style={{ fontFamily: "system-ui" }}>Loading…</p>;
 
-  // ✅ With Option A, if kidId is missing, route is invalid—send them to pick a kid
-  if (!effectiveKidId) {
-    return <Navigate to="/parent/kids" replace />;
+if (!effectiveKidId) {
+  return (
+    <div
+      style={{
+        maxWidth: 860,
+        margin: "40px auto",
+        padding: 16,
+        fontFamily: "system-ui",
+        background: ui.bg,
+        color: ui.text,
+        minHeight: "60vh",
+      }}
+    >
+      <h1 style={{ marginBottom: 8 }}>Kids + Rewards</h1>
+      <p style={{ marginTop: 0, color: ui.subtleText }}>
+        Pick a kid to continue.
+      </p>
 
-  }
+      <div
+        style={{
+          border: `1px solid ${ui.border}`,
+          borderRadius: 12,
+          padding: 14,
+          background: ui.card,
+          display: "flex",
+          gap: 12,
+          alignItems: "center",
+          marginTop: 16,
+        }}
+      >
+        <div style={{ minWidth: 120, fontWeight: 600 }}>Select Kid:</div>
+
+        {kids.length === 0 ? (
+          <span style={{ color: ui.subtleText }}>No kids found.</span>
+        ) : (
+          <KidSelector
+            kids={kids}
+            selectedKidId={selectedKidId || String(kids[0].id)}
+            onChange={(newKidId) => {
+              setSelectedKidId(newKidId);
+
+              const kid = kids.find((k) => String(k.id) === String(newKidId));
+
+              setAuth((prev: any) => ({
+                ...prev,
+                selectedKidId: newKidId,
+                selectedKidName: kid?.displayName,
+              }));
+
+              navigate(`/parent/kids/${newKidId}`, { replace: true });
+            }}
+          />
+        )}
+
+        {kids.length > 0 && (
+          <button
+            style={{
+              marginLeft: "auto",
+              padding: "8px 12px",
+              borderRadius: 10,
+              cursor: "pointer",
+              border: `1px solid ${ui.border}`,
+              background: ui.buttonBg,
+              color: ui.buttonText,
+            }}
+            onClick={() =>
+              navigate(`/parent/kids/${selectedKidId || String(kids[0].id)}`, {
+                replace: true,
+              })
+            }
+          >
+            Continue
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 
   return (
     <div
@@ -322,9 +433,20 @@ async function onDeleteReward(id: number) {
             <strong>Points:</strong> {points}
           </div>
 
-          <Link to="/select-kid" style={{ textDecoration: "underline" }}>
-            Select Kid
-          </Link>
+<button
+  onClick={() => navigate("/parent/kids", { replace: true })}
+  style={{
+    border: `1px solid ${ui.border}`,
+    background: ui.buttonBg,
+    color: ui.buttonText,
+    borderRadius: 10,
+    padding: "6px 10px",
+    cursor: "pointer",
+  }}
+>
+  Change Kid
+</button>
+
         </div>
       </div>
 
