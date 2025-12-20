@@ -335,6 +335,9 @@ if (!effectiveKidId) {
           gap: 12,
           alignItems: "center",
           marginTop: 16,
+          boxShadow: isDark
+            ? "0 0 0 rgba(0,0,0,0)"
+            : "0 1px 3px rgba(15, 23, 42, 0.08)",
         }}
       >
         <div style={{ minWidth: 120, fontWeight: 600 }}>Select Kid:</div>
@@ -434,6 +437,9 @@ return (
           borderRadius: 14,
           border: `1px solid ${ui.border}`,
           background: ui.card,
+          boxShadow: isDark
+            ? "0 0 0 rgba(0,0,0,0)"
+            : "0 1px 3px rgba(15, 23, 42, 0.08)",
         }}
       >
         <div style={{ display: "grid", gap: 4 }}>
@@ -483,6 +489,9 @@ return (
           padding: 16,
           marginBottom: 18,
           background: ui.card,
+          boxShadow: isDark
+            ? "0 0 0 rgba(0,0,0,0)"
+            : "0 1px 3px rgba(15, 23, 42, 0.08)",
         }}
       >
         <h2 style={{ marginTop: 0, marginBottom: 10 }}>Tasks</h2>
@@ -641,6 +650,9 @@ return (
           padding: 16,
           marginBottom: 18,
           background: ui.card,
+          boxShadow: isDark
+            ? "0 0 0 rgba(0,0,0,0)"
+            : "0 1px 3px rgba(15, 23, 42, 0.08)",
         }}
       >
         <h2 style={{ marginTop: 0, marginBottom: 10 }}>Rewards</h2>
@@ -794,6 +806,9 @@ return (
               borderRadius: 14,
               padding: 16,
               background: ui.card,
+              boxShadow: isDark
+            ? "0 0 0 rgba(0,0,0,0)"
+            : "0 1px 3px rgba(15, 23, 42, 0.08)",
             }}
           >
             <h3 style={{ marginTop: 0 }}>Parent: Create Task</h3>
@@ -846,6 +861,9 @@ return (
               borderRadius: 14,
               padding: 16,
               background: ui.card,
+              boxShadow: isDark
+            ? "0 0 0 rgba(0,0,0,0)"
+            : "0 1px 3px rgba(15, 23, 42, 0.08)",
             }}
           >
             <h3 style={{ marginTop: 0 }}>Parent: Create Reward</h3>
