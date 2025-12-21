@@ -21,18 +21,18 @@ export default function Login() {
 
   async function login() {
     try {
-      const data = await parentLogin({ username, password });
+const data = await parentLogin({ username, password });
 
-setAuth((prev: any) => ({
+
+setAuth((prev) => ({
   ...prev,
   parentToken: data.token,
   activeRole: "Parent",
-  uiMode: "Parent", // ✅ always start in Parent mode after login
-
-  // keep your selection fields if you want
+  uiMode: "Parent",
   selectedKidId: prev.selectedKidId,
   selectedKidName: prev.selectedKidName,
 }));
+
 
 
       navigate("/parent/kids", { replace: true });

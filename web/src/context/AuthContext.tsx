@@ -54,7 +54,11 @@ function loadAuth(): AuthState {
 
     const parsed = JSON.parse(raw) as Partial<AuthState>;
 
-    const parentToken = parsed.parentToken ?? null;
+const parentToken =
+  typeof parsed.parentToken === "string" && parsed.parentToken.length > 0
+    ? parsed.parentToken
+    : null;
+
     const activeRole: Role | null = parentToken ? "Parent" : null;
 
     return {
