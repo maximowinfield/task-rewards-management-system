@@ -1,4 +1,3 @@
-// src/pages/TodosPage.tsx
 import { useEffect, useState } from "react";
 import { api } from "../api";
 
@@ -15,11 +14,13 @@ export default function TodosPage(): JSX.Element {
 
   const loadTodos = async () => {
     try {
-      const res = await api.get<TodoItem[]>("/api/todos");
+      // ✅ baseURL is "/api", so this hits "/api/todos"
+      const res = await api.get<TodoItem[]>("/todos");
       setTodos(res.data);
       setError(null);
-    } catch {
-      setError("Failed to load todos.");
+    } catch (err: any) {
+      const status = err?.response?.status;
+      setError(`Failed to load todos.${status ? ` (HTTP ${status})` : ""}`);
     }
   };
 
@@ -30,26 +31,18 @@ export default function TodosPage(): JSX.Element {
   const addTodo = async () => {
     if (!title.trim()) return;
 
-    await api.post("/api/todos", {
-      title,
-      isDone: false,
-    });
-
+    await api.post("/todos", { title, isDone: false });
     setTitle("");
     await loadTodos();
   };
 
   const toggleTodo = async (todo: TodoItem) => {
-    await api.put(`/api/todos/${todo.id}`, {
-      ...todo,
-      isDone: !todo.isDone,
-    });
-
+    await api.put(`/todos/${todo.id}`, { ...todo, isDone: !todo.isDone });
     await loadTodos();
   };
 
   const deleteTodo = async (id: number) => {
-    await api.delete(`/api/todos/${id}`);
+    await api.delete(`/todos/${id}`);
     await loadTodos();
   };
 
