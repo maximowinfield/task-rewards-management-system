@@ -224,10 +224,21 @@ api.MapGet("/health", () => Results.Ok(new { status = "ok" }))
 
 api.MapPost("/parent/login", async (AppDbContext db, IPasswordHasher<AppUser> hasher, ParentLoginRequest req) =>
 {
-    var user = await db.Users.FirstOrDefaultAsync(u => u.Username == req.Username && u.Role == "Parent");
+    var username = (req.Username ?? "").Trim();
+    var password = req.Password ?? "";
+
+    if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+        return Results.Unauthorized();
+
+    // ✅ Case-insensitive username match + parent role
+    var user = await db.Users.FirstOrDefaultAsync(u =>
+        u.Role == "Parent" &&
+        u.Username.ToLower() == username.ToLower()
+    );
+
     if (user is null) return Results.Unauthorized();
 
-    var verified = hasher.VerifyHashedPassword(user, user.PasswordHash, req.Password);
+    var verified = hasher.VerifyHashedPassword(user, user.PasswordHash, password);
     if (verified == PasswordVerificationResult.Failed) return Results.Unauthorized();
 
     var token = CreateToken(subjectId: user.Id, role: "Parent");
@@ -360,7 +371,7 @@ api.MapPost("/tasks", async (ClaimsPrincipal principal, AppDbContext db, CreateT
 })
 .RequireAuthorization("ParentOnly");
 
-// ✅ NEW: Parent edits a task (title/points/assigned kid)
+// ✅ Parent edits a task (title/points/assigned kid)
 api.MapPut("/tasks/{id:int}", async (ClaimsPrincipal principal, AppDbContext db, int id, UpdateTaskRequest req) =>
 {
     var parentId = GetUserId(principal);
@@ -400,7 +411,6 @@ api.MapPut("/tasks/{id:int}", async (ClaimsPrincipal principal, AppDbContext db,
     return Results.Ok(task);
 })
 .RequireAuthorization("ParentOnly");
-
 
 api.MapPut("/tasks/{id:int}/complete", async (ClaimsPrincipal principal, AppDbContext db, int id) =>
 {
@@ -489,7 +499,7 @@ api.MapPost("/rewards", async (AppDbContext db, CreateRewardRequest req) =>
 })
 .RequireAuthorization("ParentOnly");
 
-// ✅ NEW: Parent edits a reward
+// ✅ Parent edits a reward
 api.MapPut("/rewards/{id:int}", async (AppDbContext db, int id, UpdateRewardRequest req) =>
 {
     var reward = await db.Rewards.FirstOrDefaultAsync(r => r.Id == id);
@@ -513,8 +523,7 @@ api.MapPut("/rewards/{id:int}", async (AppDbContext db, int id, UpdateRewardRequ
 })
 .RequireAuthorization("ParentOnly");
 
-
-// ✅ NEW: Parent deletes a reward
+// ✅ Parent deletes a reward
 api.MapDelete("/rewards/{id:int}", async (AppDbContext db, int id) =>
 {
     var reward = await db.Rewards.FirstOrDefaultAsync(r => r.Id == id);
@@ -574,19 +583,27 @@ api.MapPost("/todos", async (AppDbContext db, TodoItem todo) =>
     db.Todos.Add(todo);
     await db.SaveChangesAsync();
     return Results.Created($"/api/todos/{todo.Id}", todo);
-});
+})
+.RequireAuthorization();
 
 api.MapPut("/todos/{id:int}", async (AppDbContext db, int id, TodoItem updated) =>
 {
     var todo = await db.Todos.FirstOrDefaultAsync(t => t.Id == id);
     if (todo is null) return Results.NotFound();
 
-    todo.Title = updated.Title;
+    // ✅ Only validate title if it was provided (allows toggle-only updates)
+    if (updated.Title is not null && string.IsNullOrWhiteSpace(updated.Title))
+        return Results.BadRequest("Title cannot be empty.");
+
+    if (updated.Title is not null)
+        todo.Title = updated.Title.Trim();
+
     todo.IsDone = updated.IsDone;
 
     await db.SaveChangesAsync();
     return Results.Ok(todo);
-});
+})
+.RequireAuthorization();
 
 api.MapDelete("/todos/{id:int}", async (AppDbContext db, int id) =>
 {
@@ -596,7 +613,8 @@ api.MapDelete("/todos/{id:int}", async (AppDbContext db, int id) =>
     db.Todos.Remove(todo);
     await db.SaveChangesAsync();
     return Results.NoContent();
-});
+})
+.RequireAuthorization();
 
 // -------------------- ✅ SPA fallback (deep links) --------------------
 app.MapFallbackToFile("index.html");

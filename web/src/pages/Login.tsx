@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { parentLogin } from "../api";
 
-export default function Login() {
+export default function Login(): JSX.Element {
   const { setAuth } = useAuth();
   const navigate = useNavigate();
 
@@ -13,36 +13,63 @@ export default function Login() {
   const demoPass = import.meta.env.VITE_DEMO_PASSWORD ?? "";
 
   // ✅ Prefill only when demo is enabled
-  const initialUsername = useMemo(() => (demoEnabled ? demoUser : ""), [demoEnabled, demoUser]);
-  const initialPassword = useMemo(() => (demoEnabled ? demoPass : ""), [demoEnabled, demoPass]);
+  const initialUsername = useMemo(
+    () => (demoEnabled ? demoUser : ""),
+    [demoEnabled, demoUser]
+  );
+  const initialPassword = useMemo(
+    () => (demoEnabled ? demoPass : ""),
+    [demoEnabled, demoPass]
+  );
 
   const [username, setUsername] = useState(initialUsername);
   const [password, setPassword] = useState(initialPassword);
 
   async function login() {
     try {
-const data = await parentLogin({ username, password });
+      // ✅ Mobile-proof: avoid hidden spaces / autocap issues
+      const cleanUsername = username.trim();
+      const cleanPassword = password.trim();
 
+      const data = await parentLogin({
+        username: cleanUsername,
+        password: cleanPassword,
+      });
 
-setAuth((prev) => ({
-  ...prev,
-  parentToken: data.token,
-  activeRole: "Parent",
-  uiMode: "Parent",
-  selectedKidId: prev.selectedKidId,
-  selectedKidName: prev.selectedKidName,
-}));
-
-
+      setAuth((prev) => ({
+        ...prev,
+        parentToken: data.token,
+        activeRole: "Parent",
+        uiMode: "Parent",
+        selectedKidId: prev.selectedKidId,
+        selectedKidName: prev.selectedKidName,
+      }));
 
       navigate("/parent/kids", { replace: true });
     } catch (err: any) {
-      alert(err?.message || "Login failed");
+      // ✅ Better debugging for 401s (especially on mobile)
+      const status = err?.response?.status;
+      const body = err?.response?.data;
+
+      alert(
+        `Login failed\n\nstatus: ${status ?? "unknown"}\nAPI_URL: ${
+          import.meta.env.VITE_API_URL || "/api"
+        }\n\n${
+          typeof body === "string" ? body : JSON.stringify(body, null, 2)
+        }`
+      );
     }
   }
 
   return (
-    <div style={{ fontFamily: "system-ui", maxWidth: 420, margin: "60px auto", padding: 16 }}>
+    <div
+      style={{
+        fontFamily: "system-ui",
+        maxWidth: 420,
+        margin: "60px auto",
+        padding: 16,
+      }}
+    >
       <h2 style={{ marginTop: 0 }}>Parent Login</h2>
 
       {demoEnabled && (
@@ -56,7 +83,9 @@ setAuth((prev) => ({
             color: "#0f172a",
           }}
         >
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>Demo credentials</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>
+            Demo credentials
+          </div>
           <div>
             <strong>Username:</strong> {demoUser}
           </div>
@@ -72,7 +101,15 @@ setAuth((prev) => ({
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           autoComplete="username"
-          style={{ padding: 10, borderRadius: 10, border: "1px solid #cbd5e1" }}
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          inputMode="text"
+          style={{
+            padding: 10,
+            borderRadius: 10,
+            border: "1px solid #cbd5e1",
+          }}
         />
 
         <input
@@ -81,7 +118,14 @@ setAuth((prev) => ({
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="current-password"
-          style={{ padding: 10, borderRadius: 10, border: "1px solid #cbd5e1" }}
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          style={{
+            padding: 10,
+            borderRadius: 10,
+            border: "1px solid #cbd5e1",
+          }}
         />
 
         <button
