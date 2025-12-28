@@ -260,7 +260,7 @@ const kidsRewardsPath =
     }
   />
 
-  {/* Kid-only pages */}
+  {/* Kid-only ROUTES */}
   <Route
     path="/kid/kids"
     element={
@@ -269,6 +269,16 @@ const kidsRewardsPath =
       </RequireRole>
     }
   />
+
+  <Route
+  path="/kid/todos"
+  element={
+    <RequireRole role="Kid">
+      <TodosPage />
+    </RequireRole>
+  }
+/>
+
 
   <Route
     path="/kid/kids/:kidId"

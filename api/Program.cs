@@ -578,7 +578,7 @@ api.MapPost("/rewards/{rewardId:int}/redeem", async (ClaimsPrincipal principal, 
 api.MapGet("/todos", async (AppDbContext db) =>
     Results.Ok(await db.Todos.OrderBy(t => t.Id).ToListAsync())
 )
-.RequireAuthorization();
+.RequireAuthorization(policy => policy.RequireRole("Parent", "Kid"));
 
 api.MapPost("/todos", async (AppDbContext db, TodoItem todo) =>
 {
@@ -592,7 +592,7 @@ api.MapPost("/todos", async (AppDbContext db, TodoItem todo) =>
     await db.SaveChangesAsync();
     return Results.Created($"/api/todos/{todo.Id}", todo);
 })
-.RequireAuthorization();
+.RequireAuthorization(policy => policy.RequireRole("Parent", "Kid"));
 
 api.MapPut("/todos/{id:int}", async (AppDbContext db, int id, UpdateTodoRequest updated) =>
 {
@@ -612,7 +612,7 @@ api.MapPut("/todos/{id:int}", async (AppDbContext db, int id, UpdateTodoRequest 
     await db.SaveChangesAsync();
     return Results.Ok(todo);
 })
-.RequireAuthorization();
+.RequireAuthorization(policy => policy.RequireRole("Parent", "Kid"));
 
 api.MapDelete("/todos/{id:int}", async (AppDbContext db, int id) =>
 {
@@ -623,7 +623,7 @@ api.MapDelete("/todos/{id:int}", async (AppDbContext db, int id) =>
     await db.SaveChangesAsync();
     return Results.NoContent();
 })
-.RequireAuthorization();
+.RequireAuthorization(policy => policy.RequireRole("Parent", "Kid"));
 
 
 // -------------------- ✅ SPA fallback (deep links) --------------------
