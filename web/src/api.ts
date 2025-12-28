@@ -32,9 +32,10 @@ api.interceptors.request.use((config) => {
     if (raw) {
       const parsed = JSON.parse(raw);
 
-      // ✅ choose token based on activeRole (preferred) or uiMode
+      // 🔑 Determine which role is active
       const role = parsed?.activeRole ?? parsed?.uiMode;
 
+      // 🔑 Pick the correct token
       const token =
         role === "Kid"
           ? parsed?.kidToken
@@ -50,6 +51,7 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
 
 
 //
