@@ -6,6 +6,7 @@ import TodosPage from "./pages/TodosPage";
 import Login from "./pages/Login";
 import RequireRole from "./components/RequireRole";
 import { useAuth } from "./context/AuthContext";
+import AppLayout from "./components/AppLayout";
 
 export default function App(): JSX.Element {
   const { auth, enterKidMode, enterParentMode, logout } = useAuth();
@@ -166,17 +167,23 @@ const kidsRewardsPath =
             </Link>
 
             {/* Todos are truly parent-only; only show in Parent role */}
-            {auth?.activeRole !== "Kid" && (
-              <Link
-                to="/parent/todos"
-                style={{
-                  ...navPill,
-                  ...(location.pathname.startsWith("/parent/todos") ? navPillActive : {}),
-                }}
-              >
-                Todos
-              </Link>
-            )}
+{isAuthed && (
+  <Link
+    to={auth?.activeRole === "Kid" ? "/kid/todos" : "/parent/todos"}
+    style={{
+      ...navPill,
+      ...(
+        location.pathname.startsWith("/parent/todos") ||
+        location.pathname.startsWith("/kid/todos")
+          ? navPillActive
+          : {}
+      ),
+    }}
+  >
+    Todos
+  </Link>
+)}
+
           </>
         )}
 
@@ -260,7 +267,7 @@ const kidsRewardsPath =
     }
   />
 
-  {/* Kid-only ROUTES */}
+  {/* Kid-only pages */}
   <Route
     path="/kid/kids"
     element={
@@ -271,16 +278,6 @@ const kidsRewardsPath =
   />
 
   <Route
-  path="/kid/todos"
-  element={
-    <RequireRole role="Kid">
-      <TodosPage />
-    </RequireRole>
-  }
-/>
-
-
-  <Route
     path="/kid/kids/:kidId"
     element={
       <RequireRole role="Kid">
@@ -289,8 +286,18 @@ const kidsRewardsPath =
     }
   />
 
+  <Route
+    path="/kid/todos"
+    element={
+      <RequireRole role="Kid">
+        <TodosPage />
+      </RequireRole>
+    }
+  />
+
   <Route path="*" element={<Navigate to="/" replace />} />
 </Routes>
+
 
     </div>
   );
