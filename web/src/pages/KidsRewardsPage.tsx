@@ -25,6 +25,8 @@ import { getKids } from "../api";
 
 
 export default function KidsRewardsPage() {
+
+  
   const { auth, setAuth } = useAuth();
   const { kidId } = useParams<{ kidId: string }>();
 
@@ -56,6 +58,7 @@ const ui = {
   dangerBg: isDark ? "#3a1212" : "#fee2e2",
   dangerText: isDark ? "#fecaca" : "#991b1b",
 };
+
 
 
 useEffect(() => {
@@ -110,6 +113,18 @@ const effectiveKidId = useMemo(() => {
   // ✅ Parent mode fallback to selected kid
   return auth?.selectedKidId ?? "";
 }, [kidId, auth?.activeRole, auth?.kidId, auth?.selectedKidId]);
+
+ // 🔎 DEBUG — put it RIGHT HERE
+  console.log("KidsRewardsPage auth:", {
+    uiMode: auth?.uiMode,
+    activeRole: auth?.activeRole,
+    hasParentToken: !!auth?.parentToken,
+    hasKidToken: !!auth?.kidToken,
+    kidId: auth?.kidId,
+    selectedKidId: auth?.selectedKidId,
+    urlKidId: kidId,
+    effectiveKidId,
+  });
 
 
   // ✅ Inline edit state
