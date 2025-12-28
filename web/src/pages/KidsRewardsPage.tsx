@@ -62,7 +62,8 @@ useEffect(() => {
   (async () => {
     try {
       // only load kids if parent is logged in
-      if (!auth?.parentToken) return;
+      if (!isParentMode || !auth?.parentToken) return;
+
 
       const list = await getKids(); // must return KidProfile[]
       setKids(list);
@@ -102,7 +103,14 @@ useEffect(() => {
   const [rewardCost, setRewardCost] = useState(20);
 
   // ✅ Option A: kidId comes from the URL
-  const effectiveKidId = useMemo(() => kidId ?? "", [kidId]);
+const effectiveKidId = useMemo(() => {
+  if (kidId) return kidId;
+  // ✅ Kid mode fallback to the logged-in kid
+  if (auth?.activeRole === "Kid") return auth?.kidId ?? auth?.selectedKidId ?? "";
+  // ✅ Parent mode fallback to selected kid
+  return auth?.selectedKidId ?? "";
+}, [kidId, auth?.activeRole, auth?.kidId, auth?.selectedKidId]);
+
 
   // ✅ Inline edit state
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
@@ -210,6 +218,7 @@ async function onDeleteReward(id: number) {
         setError(null);
 
 
+
 if (!effectiveKidId) {
   setLoading(false);
   return;
@@ -303,7 +312,15 @@ if (!effectiveKidId) {
 
   if (loading) return <p style={{ fontFamily: "system-ui" }}>Loading…</p>;
 
+
+  
 if (!effectiveKidId) {
+  // ✅ Kid mode should never see "pick a kid"
+  if (auth?.activeRole === "Kid") {
+    return <Navigate to="/" replace />;
+  }
+
+  // Parent mode: show picker
   return (
     <div
       style={{
@@ -460,21 +477,23 @@ return (
             Points: {points}
           </div>
 
-          <button
-            onClick={() => navigate(kidsBasePath, { replace: true })}
+{isParentMode && (
+  <button
+    onClick={() => navigate(kidsBasePath, { replace: true })}
+    style={{
+      border: `1px solid ${ui.border}`,
+      background: ui.buttonBg,
+      color: ui.buttonText,
+      borderRadius: 12,
+      padding: "8px 12px",
+      cursor: "pointer",
+      fontWeight: 700,
+    }}
+  >
+    Change Kid
+  </button>
+)}
 
-            style={{
-              border: `1px solid ${ui.border}`,
-              background: ui.buttonBg,
-              color: ui.buttonText,
-              borderRadius: 12,
-              padding: "8px 12px",
-              cursor: "pointer",
-              fontWeight: 700,
-            }}
-          >
-            Change Kid
-          </button>
         </div>
       </div>
 
