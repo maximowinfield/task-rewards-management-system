@@ -1,15 +1,16 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { setApiToken } from "../api";
+import { setApiRoleToken, setApiToken, startKidSession } from "../api";
 
-type Role = "Parent"; // authentication role (only parent login exists now)
-type UiMode = "Parent" | "Kid"; // UI mode toggle
+type Role = "Parent" | "Kid";
+type UiMode = "Parent" | "Kid";
 
 export interface AuthState {
   parentToken: string | null;
-  activeRole: Role | null;
+  kidToken: string | null;          // ✅ NEW
+  activeRole: Role | null;          // ✅ Parent or Kid (or null logged out)
+  uiMode: UiMode;
 
-  uiMode: UiMode; // ✅ NEW
-
+  // optional session/meta
   kidId?: string;
   kidName?: string;
 
@@ -17,35 +18,32 @@ export interface AuthState {
   selectedKidName?: string;
 }
 
-
 type AuthContextValue = {
   auth: AuthState;
   setAuth: React.Dispatch<React.SetStateAction<AuthState>>;
+
+  // ✅ helpers to switch modes properly
+  enterParentMode: () => void;
+  enterKidMode: (kidId: string) => Promise<void>;
+  logout: () => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 const STORAGE_KEY = "kidsrewards.auth.v1";
 
-// ✅ Single token for API calls (Kid mode is UI-only)
-function getApiToken(a: AuthState) {
-  return a.parentToken ?? undefined;
-}
-
 function emptyAuth(): AuthState {
   return {
     parentToken: null,
+    kidToken: null,
     activeRole: null,
-    uiMode: "Kid", // safe default when logged out
-
+    uiMode: "Kid",
     kidId: undefined,
     kidName: undefined,
     selectedKidId: undefined,
     selectedKidName: undefined,
   };
 }
-
-
 
 function loadAuth(): AuthState {
   try {
@@ -54,20 +52,44 @@ function loadAuth(): AuthState {
 
     const parsed = JSON.parse(raw) as Partial<AuthState>;
 
-const parentToken =
-  typeof parsed.parentToken === "string" && parsed.parentToken.length > 0
-    ? parsed.parentToken
-    : null;
+    const parentToken =
+      typeof parsed.parentToken === "string" && parsed.parentToken.length > 0
+        ? parsed.parentToken
+        : null;
 
-    const activeRole: Role | null = parentToken ? "Parent" : null;
+    const kidToken =
+      typeof parsed.kidToken === "string" && parsed.kidToken.length > 0
+        ? parsed.kidToken
+        : null;
+
+    const uiMode: UiMode =
+      parsed.uiMode === "Parent" || parsed.uiMode === "Kid"
+        ? parsed.uiMode
+        : parentToken
+          ? "Parent"
+          : "Kid";
+
+    // ✅ Keep activeRole if present and valid; otherwise infer
+    let activeRole: Role | null =
+      parsed.activeRole === "Parent" || parsed.activeRole === "Kid"
+        ? parsed.activeRole
+        : null;
+
+    if (!activeRole) {
+      if (uiMode === "Kid" && kidToken) activeRole = "Kid";
+      else if (parentToken) activeRole = "Parent";
+    }
+
+    // Safety: if role says Kid but no kidToken, fall back to Parent if possible
+    if (activeRole === "Kid" && !kidToken) {
+      activeRole = parentToken ? "Parent" : null;
+    }
 
     return {
       parentToken,
+      kidToken,
       activeRole,
-
-      // if missing, default to safe mode
-      uiMode: parsed.uiMode ?? (parentToken ? "Parent" : "Kid"),
-
+      uiMode,
       kidId: parsed.kidId,
       kidName: parsed.kidName,
       selectedKidId: parsed.selectedKidId,
@@ -79,13 +101,17 @@ const parentToken =
   }
 }
 
-
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // ✅ Load auth AND immediately set axios token during initialization
   const [auth, setAuth] = useState<AuthState>(() => {
     const initial = loadAuth();
-    setApiToken(getApiToken(initial));
+
+    // ✅ Set axios token based on activeRole
+    if (initial.activeRole) {
+      setApiRoleToken(initial.activeRole, initial);
+    } else {
+      setApiToken(undefined);
+    }
+
     return initial;
   });
 
@@ -94,16 +120,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
     } catch {
-      // ignore storage errors
+      // ignore
     }
   }, [auth]);
 
-  // ✅ Keep axios token in sync when token changes
+  // ✅ Keep axios token in sync when role/tokens change
   useEffect(() => {
-    setApiToken(getApiToken(auth));
-  }, [auth.parentToken]);
+    if (auth.activeRole) {
+      setApiRoleToken(auth.activeRole, auth);
+    } else {
+      setApiToken(undefined);
+    }
+  }, [auth.activeRole, auth.parentToken, auth.kidToken]);
 
-  return <AuthContext.Provider value={{ auth, setAuth }}>{children}</AuthContext.Provider>;
+  const enterParentMode = () => {
+    setAuth((prev) => ({
+      ...prev,
+      uiMode: "Parent",
+      activeRole: prev.parentToken ? "Parent" : null,
+    }));
+  };
+
+  const enterKidMode = async (kidId: string) => {
+    // must have parent token to start kid session
+    if (!auth.parentToken) throw new Error("Parent must be logged in to start a kid session.");
+
+    // ✅ call API to get kid JWT
+    const res = await startKidSession({ kidId });
+
+    setAuth((prev) => ({
+      ...prev,
+      uiMode: "Kid",
+      activeRole: "Kid",
+      kidToken: res.token,            // ✅ store kid token
+      selectedKidId: res.kidId,
+      selectedKidName: res.displayName,
+      kidId: res.kidId,
+      kidName: res.displayName,
+    }));
+  };
+
+  const logout = () => {
+    setAuth(emptyAuth());
+    localStorage.removeItem(STORAGE_KEY);
+    setApiToken(undefined);
+  };
+
+  return (
+    <AuthContext.Provider value={{ auth, setAuth, enterParentMode, enterKidMode, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export const useAuth = () => {

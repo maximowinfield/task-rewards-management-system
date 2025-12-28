@@ -1,6 +1,6 @@
 // src/App.tsx
 import React from "react";
-import { Link, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Link, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import KidsRewardsPage from "./pages/KidsRewardsPage";
 import TodosPage from "./pages/TodosPage";
 import Login from "./pages/Login";
@@ -8,8 +8,9 @@ import RequireRole from "./components/RequireRole";
 import { useAuth } from "./context/AuthContext";
 
 export default function App(): JSX.Element {
-  const { auth, setAuth } = useAuth();
+  const { auth, enterKidMode, enterParentMode, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Detect system theme (used only for styling)
   const isDark =
@@ -32,7 +33,17 @@ export default function App(): JSX.Element {
   const isKidMode = auth?.uiMode === "Kid";
   const isParentMode = auth?.uiMode === "Parent";
 
-  const parentKidId = auth?.selectedKidId;
+  const selectedKidId = auth?.selectedKidId;
+
+  // ---- Routes based on activeRole (not uiMode) ----
+  const kidsRewardsPath =
+    auth?.activeRole === "Kid"
+      ? selectedKidId
+        ? `/kid/kids/${selectedKidId}`
+        : "/"
+      : selectedKidId
+        ? `/parent/kids/${selectedKidId}`
+        : "/parent/kids";
 
   // Nav pills
   const navPill: React.CSSProperties = {
@@ -76,35 +87,41 @@ export default function App(): JSX.Element {
     fontWeight: 800,
   };
 
-  function clearAuth() {
-    setAuth({
-      parentToken: null,
-      activeRole: null,
-      uiMode: "Kid",
-      kidId: undefined,
-      kidName: undefined,
-      selectedKidId: undefined,
-      selectedKidName: undefined,
-    });
-  }
-
-  function switchToParentMode() {
+  async function switchToParentMode() {
     if (!auth?.parentToken) return;
 
     const expectedPin = import.meta.env.VITE_PARENT_PIN || "1234";
     const entered = window.prompt("Enter Parent PIN:");
 
     if (entered === expectedPin) {
-      setAuth((prev) => ({ ...prev, uiMode: "Parent" }));
+      enterParentMode(); // sets activeRole + uiMode
+      navigate(selectedKidId ? `/parent/kids/${selectedKidId}` : "/parent/kids", { replace: true });
     } else {
       alert("Wrong PIN. Staying in Kid Mode.");
-      setAuth((prev) => ({ ...prev, uiMode: "Kid" }));
     }
   }
 
-  function switchToKidMode() {
+  async function switchToKidMode() {
     if (!auth?.parentToken) return;
-    setAuth((prev) => ({ ...prev, uiMode: "Kid" }));
+
+    const kidId = auth?.selectedKidId;
+    if (!kidId) {
+      alert("Pick a kid first (Change Kid) before entering Kid Mode.");
+      return;
+    }
+
+    try {
+      await enterKidMode(kidId); // calls /kid-session and stores kidToken + activeRole
+      navigate(`/kid/kids/${kidId}`, { replace: true });
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.message ?? "Failed to start kid session.");
+    }
+  }
+
+  function clearAuth() {
+    logout();
+    navigate("/login", { replace: true });
   }
 
   return (
@@ -135,24 +152,27 @@ export default function App(): JSX.Element {
         {isAuthed && (
           <>
             <Link
-              to={parentKidId ? `/parent/kids/${parentKidId}` : "/parent/kids"}
+              to={kidsRewardsPath}
               style={{
                 ...navPill,
-                ...(location.pathname.startsWith("/parent/kids") ? navPillActive : {}),
+                ...(location.pathname.includes("/kids") ? navPillActive : {}),
               }}
             >
               Kids + Rewards
             </Link>
 
-            <Link
-              to="/parent/todos"
-              style={{
-                ...navPill,
-                ...(location.pathname.startsWith("/parent/todos") ? navPillActive : {}),
-              }}
-            >
-              Todos
-            </Link>
+            {/* Todos are truly parent-only; only show in Parent role */}
+            {auth?.activeRole !== "Kid" && (
+              <Link
+                to="/parent/todos"
+                style={{
+                  ...navPill,
+                  ...(location.pathname.startsWith("/parent/todos") ? navPillActive : {}),
+                }}
+              >
+                Todos
+              </Link>
+            )}
           </>
         )}
 
@@ -189,8 +209,14 @@ export default function App(): JSX.Element {
           path="/"
           element={
             isAuthed ? (
-              parentKidId ? (
-                <Navigate to={`/parent/kids/${parentKidId}`} replace />
+              auth?.activeRole === "Kid" ? (
+                selectedKidId ? (
+                  <Navigate to={`/kid/kids/${selectedKidId}`} replace />
+                ) : (
+                  <Navigate to="/parent/kids" replace />
+                )
+              ) : selectedKidId ? (
+                <Navigate to={`/parent/kids/${selectedKidId}`} replace />
               ) : (
                 <Navigate to="/parent/kids" replace />
               )
@@ -226,6 +252,16 @@ export default function App(): JSX.Element {
           element={
             <RequireRole role="Parent">
               <TodosPage />
+            </RequireRole>
+          }
+        />
+
+        {/* Kid-only page */}
+        <Route
+          path="/kid/kids/:kidId"
+          element={
+            <RequireRole role="Kid">
+              <KidsRewardsPage />
             </RequireRole>
           }
         />
