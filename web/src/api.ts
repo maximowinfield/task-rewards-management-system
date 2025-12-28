@@ -31,7 +31,15 @@ api.interceptors.request.use((config) => {
     const raw = localStorage.getItem("kidsrewards.auth.v1");
     if (raw) {
       const parsed = JSON.parse(raw);
-      const token = parsed?.parentToken;
+
+      // ✅ choose token based on activeRole (preferred) or uiMode
+      const role = parsed?.activeRole ?? parsed?.uiMode;
+
+      const token =
+        role === "Kid"
+          ? parsed?.kidToken
+          : parsed?.parentToken;
+
       if (token) {
         config.headers = config.headers ?? {};
         config.headers.Authorization = `Bearer ${token}`;
@@ -43,6 +51,7 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+
 //
 // ✅ Used by AuthContext to sync token immediately on login/logout
 //
@@ -53,6 +62,13 @@ export function setApiToken(token?: string) {
     delete api.defaults.headers.common.Authorization;
   }
 }
+
+// ✅ Optional helper (nice)
+export function setApiRoleToken(role: "Kid" | "Parent", auth: any) {
+  const token = role === "Kid" ? auth?.kidToken : auth?.parentToken;
+  setApiToken(token);
+}
+
 
 /* ============================================================
    AUTH

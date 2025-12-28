@@ -84,12 +84,6 @@ useEffect(() => {
 }, [auth?.selectedKidId]);
 
 
-  // ✅ Force Parent mode when visiting parent pages
-  useEffect(() => {
-    if (auth?.parentToken && auth?.activeRole !== "Parent") {
-      setAuth((prev: any) => ({ ...prev, activeRole: "Parent" }));
-    }
-  }, [auth?.parentToken, auth?.activeRole, setAuth]);
 
   const [tasks, setTasks] = useState<KidTask[]>([]);
   const [points, setPoints] = useState<number>(0);
