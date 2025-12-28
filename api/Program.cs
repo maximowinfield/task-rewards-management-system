@@ -415,12 +415,31 @@ api.MapPut("/tasks/{id:int}", async (ClaimsPrincipal principal, AppDbContext db,
 })
 .RequireAuthorization("ParentOnly");
 
-api.MapPut("/tasks/{id:int}/complete", async (ClaimsPrincipal principal, AppDbContext db, int id) =>
+api.MapPut("/tasks/{id:int}/complete", async (ClaimsPrincipal principal, AppDbContext db, int id, string? kidId) =>
 {
-    var kidId = principal.FindFirstValue("kidId") ?? GetUserId(principal);
-    if (string.IsNullOrWhiteSpace(kidId)) return Results.Unauthorized();
+    var role = principal.FindFirstValue(ClaimTypes.Role);
 
-    var task = await db.Tasks.FirstOrDefaultAsync(t => t.Id == id && t.AssignedKidId == kidId);
+    string effectiveKidId;
+
+    if (role == "Kid")
+    {
+        effectiveKidId = principal.FindFirstValue("kidId") ?? GetUserId(principal) ?? "";
+        if (string.IsNullOrWhiteSpace(effectiveKidId)) return Results.Unauthorized();
+    }
+    else
+    {
+        // Parent completing on behalf of a kid
+        var parentId = GetUserId(principal);
+        if (string.IsNullOrWhiteSpace(parentId)) return Results.Unauthorized();
+        if (string.IsNullOrWhiteSpace(kidId)) return Results.BadRequest("kidId is required for parent.");
+
+        var kidOwned = await db.Kids.AnyAsync(k => k.Id == kidId && k.ParentId == parentId);
+        if (!kidOwned) return Results.BadRequest("Unknown kidId for this parent.");
+
+        effectiveKidId = kidId;
+    }
+
+    var task = await db.Tasks.FirstOrDefaultAsync(t => t.Id == id && t.AssignedKidId == effectiveKidId);
     if (task is null) return Results.NotFound();
 
     if (task.IsComplete) return Results.Ok(task);
@@ -428,16 +447,16 @@ api.MapPut("/tasks/{id:int}/complete", async (ClaimsPrincipal principal, AppDbCo
     task.IsComplete = true;
     task.CompletedAt = DateTime.UtcNow;
 
-    var kid = await db.Kids.FirstOrDefaultAsync(k => k.Id == kidId);
+    var kid = await db.Kids.FirstOrDefaultAsync(k => k.Id == effectiveKidId);
     if (kid is null) return Results.NotFound("Kid not found.");
 
     kid.PointsBalance += task.Points;
-
 
     await db.SaveChangesAsync();
     return Results.Ok(task);
 })
 .RequireAuthorization("KidOrParent");
+
 
 api.MapDelete("/tasks/{id:int}", async (ClaimsPrincipal principal, AppDbContext db, int id) =>
 {
