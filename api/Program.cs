@@ -73,6 +73,9 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("ParentOnly", policy => policy.RequireRole("Parent"));
     options.AddPolicy("KidOnly", policy => policy.RequireRole("Kid"));
+    // ✅ ADD THIS shared policy
+    options.AddPolicy("KidOrParent", policy =>
+        policy.RequireRole("Kid", "Parent"));
 });
 
 var app = builder.Build();
@@ -428,7 +431,7 @@ api.MapPut("/tasks/{id:int}/complete", async (ClaimsPrincipal principal, AppDbCo
     await db.SaveChangesAsync();
     return Results.Ok(task);
 })
-.RequireAuthorization("KidOnly");
+.RequireAuthorization("KidOrParent");
 
 api.MapDelete("/tasks/{id:int}", async (ClaimsPrincipal principal, AppDbContext db, int id) =>
 {
