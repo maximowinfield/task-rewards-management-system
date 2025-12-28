@@ -637,7 +637,7 @@ api.MapPost("/todos", async (AppDbContext db, TodoItem todo) =>
     await db.SaveChangesAsync();
     return Results.Created($"/api/todos/{todo.Id}", todo);
 })
-.RequireAuthorization("ParentOnly");
+.RequireAuthorization(policy => policy.RequireRole("Parent", "Kid"));
 
 api.MapPut("/todos/{id:int}", async (ClaimsPrincipal principal, AppDbContext db, int id, UpdateTodoRequest updated) =>
 {
@@ -688,7 +688,8 @@ api.MapDelete("/todos/{id:int}", async (AppDbContext db, int id) =>
     await db.SaveChangesAsync();
     return Results.NoContent();
 })
-.RequireAuthorization("ParentOnly");
+.RequireAuthorization(policy => policy.RequireRole("Parent", "Kid"));
+
 
 
 // -------------------- ✅ SPA fallback (deep links) --------------------

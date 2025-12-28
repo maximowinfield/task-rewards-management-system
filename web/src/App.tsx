@@ -8,6 +8,30 @@ import RequireRole from "./components/RequireRole";
 import { useAuth } from "./context/AuthContext";
 import AppLayout from "./components/AppLayout";
 
+// ✅ Helper lives here (outside the component)
+function mapPathForRole(
+  pathname: string,
+  targetRole: "Parent" | "Kid"
+): string | null {
+  // already on correct prefix
+  if (targetRole === "Parent" && pathname.startsWith("/parent/")) return pathname;
+  if (targetRole === "Kid" && pathname.startsWith("/kid/")) return pathname;
+
+  // translate known mirrored routes
+  if (targetRole === "Kid") {
+    if (pathname.startsWith("/parent/kids")) return pathname.replace("/parent/kids", "/kid/kids");
+    if (pathname.startsWith("/parent/todos")) return pathname.replace("/parent/todos", "/kid/todos");
+  }
+
+  if (targetRole === "Parent") {
+    if (pathname.startsWith("/kid/kids")) return pathname.replace("/kid/kids", "/parent/kids");
+    if (pathname.startsWith("/kid/todos")) return pathname.replace("/kid/todos", "/parent/todos");
+  }
+
+  // unknown page → caller decides fallback
+  return null;
+}
+
 export default function App(): JSX.Element {
   const { auth, enterKidMode, enterParentMode, logout } = useAuth();
   const location = useLocation();
@@ -89,37 +113,53 @@ const kidsRewardsPath =
     fontWeight: 800,
   };
 
-  async function switchToParentMode() {
-    if (!auth?.parentToken) return;
+async function switchToParentMode() {
+  if (!auth?.parentToken) return;
 
-    const expectedPin = import.meta.env.VITE_PARENT_PIN || "1234";
-    const entered = window.prompt("Enter Parent PIN:");
+  const expectedPin = import.meta.env.VITE_PARENT_PIN || "1234";
+  const entered = window.prompt("Enter Parent PIN:");
 
-    if (entered === expectedPin) {
-      enterParentMode(); // sets activeRole + uiMode
-      navigate(selectedKidId ? `/parent/kids/${selectedKidId}` : "/parent/kids", { replace: true });
-    } else {
-      alert("Wrong PIN. Staying in Kid Mode.");
-    }
+  if (entered === expectedPin) {
+    enterParentMode();
+
+    const mapped =
+      mapPathForRole(location.pathname, "Parent") ??
+      (selectedKidId ? `/parent/kids/${selectedKidId}` : "/parent/kids");
+
+    navigate(mapped, { replace: true });
+  } else {
+    alert("Wrong PIN. Staying in Kid Mode.");
+  }
+}
+
+
+async function switchToKidMode() {
+  if (!auth?.parentToken) return;
+
+  const kidId = auth?.selectedKidId;
+  if (!kidId) {
+    alert("Pick a kid first (Change Kid) before entering Kid Mode.");
+    return;
   }
 
-  async function switchToKidMode() {
-    if (!auth?.parentToken) return;
+  try {
+    await enterKidMode(kidId);
 
-    const kidId = auth?.selectedKidId;
-    if (!kidId) {
-      alert("Pick a kid first (Change Kid) before entering Kid Mode.");
-      return;
-    }
+    const mapped =
+      mapPathForRole(location.pathname, "Kid") ??
+      `/kid/kids/${kidId}`; // fallback if unknown page
 
-    try {
-      await enterKidMode(kidId); // calls /kid-session and stores kidToken + activeRole
-      navigate(`/kid/kids/${kidId}`, { replace: true });
-    } catch (e: any) {
-      console.error(e);
-      alert(e?.message ?? "Failed to start kid session.");
-    }
+    // If mapped is "/kid/kids" but we have a kidId, go to the specific kid page
+    const finalPath =
+      mapped === "/kid/kids" ? `/kid/kids/${kidId}` : mapped;
+
+    navigate(finalPath, { replace: true });
+  } catch (e: any) {
+    console.error(e);
+    alert(e?.message ?? "Failed to start kid session.");
   }
+}
+
 
   function clearAuth() {
     logout();

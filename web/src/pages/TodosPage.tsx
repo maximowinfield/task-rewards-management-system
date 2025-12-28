@@ -14,7 +14,8 @@ export default function TodosPage(): JSX.Element {
   const [title, setTitle] = useState("");
   const [error, setError] = useState<string | null>(null);
   const { auth } = useAuth();
-  const canManageTodos = auth?.activeRole === "Parent";
+  const canManageTodos = auth?.activeRole === "Parent" || auth?.activeRole === "Kid";
+
 
   const loadTodos = async () => {
     try {

@@ -127,13 +127,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [auth.activeRole, auth.parentToken, auth.kidToken]);
 
-  const enterParentMode = () => {
-    setAuth((prev) => ({
-      ...prev,
-      uiMode: "Parent",
-      activeRole: prev.parentToken ? "Parent" : null,
-    }));
-  };
+const enterParentMode = () => {
+  setAuth((prev) => ({
+    ...prev,
+    uiMode: "Parent",
+    activeRole: prev.parentToken ? "Parent" : prev.activeRole, // keep safe
+  }));
+};
+
+
 
   const enterKidMode = async (kidId: string) => {
     // must have parent token to start kid session
