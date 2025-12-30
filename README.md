@@ -19,6 +19,7 @@ The system supports a **parent–child workflow** where parents create and manag
 **Demo Credentials**
 - **User:** `parent1`
 - **Password:** `ChangeMe123`
+- **Parent Mode Pin:** `1234`
 
 ---
 
