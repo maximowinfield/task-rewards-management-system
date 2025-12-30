@@ -1,4 +1,4 @@
-// src/App.tsx 12/28/2025
+// src/App.tsx 12/30/2025
 import React from "react";
 import { Link, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import KidsRewardsPage from "./pages/KidsRewardsPage";
@@ -6,7 +6,7 @@ import TodosPage from "./pages/TodosPage";
 import Login from "./pages/Login";
 import RequireRole from "./components/RequireRole";
 import { useAuth } from "./context/AuthContext";
-import AppLayout from "./components/AppLayout";
+import SelectKid from "./pages/SelectKid";
 
 // ✅ Helper lives here (outside the component)
 function mapPathForRole(
@@ -61,15 +61,14 @@ export default function App(): JSX.Element {
   const selectedKidId = auth?.selectedKidId;
 
   // ---- Routes based on activeRole (not uiMode) ----
-const kidsRewardsPath =
-  auth?.activeRole === "Kid"
-    ? selectedKidId
-      ? `/kid/kids/${selectedKidId}`
-      : "/kid/kids"
-    : selectedKidId
-      ? `/parent/kids/${selectedKidId}`
-      : "/parent/kids";
-
+  const kidsRewardsPath =
+    auth?.activeRole === "Kid"
+      ? selectedKidId
+        ? `/kid/kids/${selectedKidId}`
+        : "/kid/kids"
+      : selectedKidId
+        ? `/parent/kids/${selectedKidId}`
+        : "/parent/kids";
 
   // Nav pills
   const navPill: React.CSSProperties = {
@@ -87,19 +86,14 @@ const kidsRewardsPath =
   };
 
   // Buttons
-  const actionBtn: React.CSSProperties = {
+  const dangerBtn: React.CSSProperties = {
     padding: "6px 10px",
     borderRadius: 10,
-    border: `1px solid rgba(148,163,184,0.35)`,
+    border: "1px solid rgba(185,28,28,0.4)",
     background: "transparent",
     cursor: "pointer",
     fontWeight: 600,
-  };
-
-  const dangerBtn: React.CSSProperties = {
-    ...actionBtn,
     color: "#b91c1c",
-    border: "1px solid rgba(185,28,28,0.4)",
     opacity: 0.9,
   };
 
@@ -113,53 +107,49 @@ const kidsRewardsPath =
     fontWeight: 800,
   };
 
-async function switchToParentMode() {
-  if (!auth?.parentToken) return;
+  async function switchToParentMode() {
+    if (!auth?.parentToken) return;
 
-  const expectedPin = import.meta.env.VITE_PARENT_PIN || "1234";
-  const entered = window.prompt("Enter Parent PIN:");
+    const expectedPin = import.meta.env.VITE_PARENT_PIN || "1234";
+    const entered = window.prompt("Enter Parent PIN:");
 
-  if (entered === expectedPin) {
-    enterParentMode();
+    if (entered === expectedPin) {
+      enterParentMode();
 
-    const mapped =
-      mapPathForRole(location.pathname, "Parent") ??
-      (selectedKidId ? `/parent/kids/${selectedKidId}` : "/parent/kids");
+      const mapped =
+        mapPathForRole(location.pathname, "Parent") ??
+        (selectedKidId ? `/parent/kids/${selectedKidId}` : "/parent/select-kid");
 
-    navigate(mapped, { replace: true });
-  } else {
-    alert("Wrong PIN. Staying in Kid Mode.");
-  }
-}
-
-
-async function switchToKidMode() {
-  if (!auth?.parentToken) return;
-
-  const kidId = auth?.selectedKidId;
-  if (!kidId) {
-    alert("Pick a kid first (Change Kid) before entering Kid Mode.");
-    return;
+      navigate(mapped, { replace: true });
+    } else {
+      alert("Wrong PIN. Staying in Kid Mode.");
+    }
   }
 
-  try {
-    await enterKidMode(kidId);
+  async function switchToKidMode() {
+    if (!auth?.parentToken) return;
 
-    const mapped =
-      mapPathForRole(location.pathname, "Kid") ??
-      `/kid/kids/${kidId}`; // fallback if unknown page
+    const kidId = auth?.selectedKidId;
+    if (!kidId) {
+      // ✅ Send them to selector instead of dead-ending
+      navigate("/parent/select-kid", { replace: true });
+      return;
+    }
 
-    // If mapped is "/kid/kids" but we have a kidId, go to the specific kid page
-    const finalPath =
-      mapped === "/kid/kids" ? `/kid/kids/${kidId}` : mapped;
+    try {
+      await enterKidMode(kidId);
 
-    navigate(finalPath, { replace: true });
-  } catch (e: any) {
-    console.error(e);
-    alert(e?.message ?? "Failed to start kid session.");
+      const mapped =
+        mapPathForRole(location.pathname, "Kid") ??
+        `/kid/kids/${kidId}`; // fallback if unknown page
+
+      const finalPath = mapped === "/kid/kids" ? `/kid/kids/${kidId}` : mapped;
+      navigate(finalPath, { replace: true });
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.message ?? "Failed to start kid session.");
+    }
   }
-}
-
 
   function clearAuth() {
     logout();
@@ -197,33 +187,31 @@ async function switchToKidMode() {
               to={kidsRewardsPath}
               style={{
                 ...navPill,
-                ...((location.pathname.startsWith("/parent/kids") || location.pathname.startsWith("/kid/kids"))
-  ? navPillActive
-  : {}),
-
+                ...(
+                  location.pathname.startsWith("/parent/kids") ||
+                  location.pathname.startsWith("/kid/kids")
+                    ? navPillActive
+                    : {}
+                ),
               }}
             >
               Kids + Rewards
             </Link>
 
-            {/* Todos are truly parent-only; only show in Parent role */}
-{isAuthed && (
-  <Link
-    to={auth?.activeRole === "Kid" ? "/kid/todos" : "/parent/todos"}
-    style={{
-      ...navPill,
-      ...(
-        location.pathname.startsWith("/parent/todos") ||
-        location.pathname.startsWith("/kid/todos")
-          ? navPillActive
-          : {}
-      ),
-    }}
-  >
-    Todos
-  </Link>
-)}
-
+            <Link
+              to={auth?.activeRole === "Kid" ? "/kid/todos" : "/parent/todos"}
+              style={{
+                ...navPill,
+                ...(
+                  location.pathname.startsWith("/parent/todos") ||
+                  location.pathname.startsWith("/kid/todos")
+                    ? navPillActive
+                    : {}
+                ),
+              }}
+            >
+              Todos
+            </Link>
           </>
         )}
 
@@ -246,6 +234,12 @@ async function switchToKidMode() {
                 Parent Mode
               </button>
 
+              {auth?.parentToken && (
+                <button onClick={() => navigate("/parent/select-kid")} style={topBtn}>
+                  Change Kid
+                </button>
+              )}
+
               <button onClick={clearAuth} style={dangerBtn}>
                 Logout
               </button>
@@ -254,91 +248,99 @@ async function switchToKidMode() {
         </div>
       </div>
 
-<Routes>
-  {/* Default route */}
-  <Route
-    path="/"
-    element={
-      isAuthed ? (
-        auth?.activeRole === "Kid" ? (
-          selectedKidId ? (
-            <Navigate to={`/kid/kids/${selectedKidId}`} replace />
-          ) : (
-            <Navigate to="/kid/kids" replace />
-          )
-        ) : selectedKidId ? (
-          <Navigate to={`/parent/kids/${selectedKidId}`} replace />
-        ) : (
-          <Navigate to="/parent/kids" replace />
-        )
-      ) : (
-        <Navigate to="/login" replace />
-      )
-    }
-  />
+      <Routes>
+        {/* Default route */}
+        <Route
+          path="/"
+          element={
+            isAuthed ? (
+              auth?.activeRole === "Kid" ? (
+                selectedKidId ? (
+                  <Navigate to={`/kid/kids/${selectedKidId}`} replace />
+                ) : (
+                  <Navigate to="/kid/kids" replace />
+                )
+              ) : selectedKidId ? (
+                <Navigate to={`/parent/kids/${selectedKidId}`} replace />
+              ) : (
+                // ✅ Parent with no kid selected → go pick one
+                <Navigate to="/parent/select-kid" replace />
+              )
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
 
-  <Route path="/login" element={<Login />} />
+        <Route path="/login" element={<Login />} />
 
-  {/* Parent-only pages */}
-  <Route
-    path="/parent/kids"
-    element={
-      <RequireRole role="Parent">
-        <KidsRewardsPage />
-      </RequireRole>
-    }
-  />
+        {/* Parent-only pages */}
+        <Route
+          path="/parent/select-kid"
+          element={
+            <RequireRole role="Parent">
+              <SelectKid />
+            </RequireRole>
+          }
+        />
 
-  <Route
-    path="/parent/kids/:kidId"
-    element={
-      <RequireRole role="Parent">
-        <KidsRewardsPage />
-      </RequireRole>
-    }
-  />
+        <Route
+          path="/parent/kids"
+          element={
+            <RequireRole role="Parent">
+              <KidsRewardsPage />
+            </RequireRole>
+          }
+        />
 
-  <Route
-    path="/parent/todos"
-    element={
-      <RequireRole role="Parent">
-        <TodosPage />
-      </RequireRole>
-    }
-  />
+        <Route
+          path="/parent/kids/:kidId"
+          element={
+            <RequireRole role="Parent">
+              <KidsRewardsPage />
+            </RequireRole>
+          }
+        />
 
-  {/* Kid-only pages */}
-  <Route
-    path="/kid/kids"
-    element={
-      <RequireRole role="Kid">
-        <KidsRewardsPage />
-      </RequireRole>
-    }
-  />
+        <Route
+          path="/parent/todos"
+          element={
+            <RequireRole role="Parent">
+              <TodosPage />
+            </RequireRole>
+          }
+        />
 
-  <Route
-    path="/kid/kids/:kidId"
-    element={
-      <RequireRole role="Kid">
-        <KidsRewardsPage />
-      </RequireRole>
-    }
-  />
+        {/* Kid-only pages */}
+        <Route
+          path="/kid/kids"
+          element={
+            <RequireRole role="Kid">
+              <KidsRewardsPage />
+            </RequireRole>
+          }
+        />
 
-  <Route
-    path="/kid/todos"
-    element={
-      <RequireRole role="Kid">
-        <TodosPage />
-      </RequireRole>
-    }
-  />
+        <Route
+          path="/kid/kids/:kidId"
+          element={
+            <RequireRole role="Kid">
+              <KidsRewardsPage />
+            </RequireRole>
+          }
+        />
 
-  <Route path="*" element={<Navigate to="/" replace />} />
-</Routes>
+        <Route
+          path="/kid/todos"
+          element={
+            <RequireRole role="Kid">
+              <TodosPage />
+            </RequireRole>
+          }
+        />
 
-
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </div>
   );
 }

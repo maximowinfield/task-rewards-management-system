@@ -36,16 +36,27 @@ export default function Login(): JSX.Element {
         password: cleanPassword,
       });
 
-      setAuth((prev) => ({
-        ...prev,
-        parentToken: data.token,
-        activeRole: "Parent",
-        uiMode: "Parent",
-        selectedKidId: prev.selectedKidId,
-        selectedKidName: prev.selectedKidName,
-      }));
+      setAuth((prev) => {
+        const next = {
+          ...prev,
+          parentToken: data.token,
+          activeRole: "Parent" as const,
+          uiMode: "Parent" as const,
 
-      navigate("/parent/kids", { replace: true });
+          // keep existing selection if present
+          selectedKidId: prev.selectedKidId,
+          selectedKidName: prev.selectedKidName,
+        };
+
+        // ✅ Route based on updated state (not stale auth)
+        const target = next.selectedKidId
+          ? `/parent/kids/${next.selectedKidId}`
+          : "/parent/select-kid";
+
+        queueMicrotask(() => navigate(target, { replace: true }));
+
+        return next;
+      });
     } catch (err: any) {
       // ✅ Better debugging for 401s (especially on mobile)
       const status = err?.response?.status;

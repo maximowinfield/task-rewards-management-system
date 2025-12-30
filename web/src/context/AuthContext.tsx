@@ -40,7 +40,7 @@ function emptyAuth(): AuthState {
     parentToken: null,
     kidToken: null,
     activeRole: null,
-    uiMode: "Kid",
+    uiMode: "Parent",
     selectedKidId: undefined,
     selectedKidName: undefined,
     kidId: undefined,
