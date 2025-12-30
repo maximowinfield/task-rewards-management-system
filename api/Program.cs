@@ -473,6 +473,17 @@ api.MapPut("/tasks/{id:int}/complete", async (ClaimsPrincipal principal, AppDbCo
 
     kid.PointsBalance += task.Points;
 
+    db.PointTransactions.Add(new PointTransaction
+    {
+        KidId = kid.Id,
+        Type = PointTransactionType.Earn,
+        Delta = task.Points,
+        TaskId = task.Id,
+        Note = $"Completed task: {task.Title}",
+        CreatedAtUtc = DateTime.UtcNow
+    });
+
+
     await db.SaveChangesAsync();
     return Results.Ok(task);
 })
@@ -501,6 +512,7 @@ api.MapGet("/points", async (ClaimsPrincipal principal, AppDbContext db, string?
     var role = principal.FindFirstValue(ClaimTypes.Role);
 
     string effectiveKidId;
+
     if (role == "Kid")
     {
         effectiveKidId = principal.FindFirstValue("kidId") ?? GetUserId(principal) ?? "";
@@ -512,24 +524,79 @@ api.MapGet("/points", async (ClaimsPrincipal principal, AppDbContext db, string?
         if (string.IsNullOrWhiteSpace(parentId)) return Results.Unauthorized();
 
         if (string.IsNullOrWhiteSpace(kidId)) return Results.BadRequest("kidId is required for parent.");
+
         var kidOwned = await db.Kids.AnyAsync(k => k.Id == kidId && k.ParentId == parentId);
         if (!kidOwned) return Results.BadRequest("Unknown kidId for this parent.");
 
         effectiveKidId = kidId;
     }
 
-    var earned = await db.Tasks
-        .Where(t => t.AssignedKidId == effectiveKidId && t.IsComplete)
-        .SumAsync(t => (int?)t.Points) ?? 0;
+    var kid = await db.Kids.FirstOrDefaultAsync(k => k.Id == effectiveKidId);
+    if (kid is null) return Results.NotFound("Kid not found.");
 
-    var spent = await (from red in db.Redemptions
-                       join rw in db.Rewards on red.RewardId equals rw.Id
-                       where red.KidId == effectiveKidId
-                       select (int?)rw.Cost).SumAsync() ?? 0;
-
-    return Results.Ok(new { kidId = effectiveKidId, points = earned - spent });
+    return Results.Ok(new { kidId = effectiveKidId, points = kid.PointsBalance });
 })
 .RequireAuthorization();
+
+// -------------------- History Endpoint --------------------
+api.MapGet("/kids/{kidId}/points/history", async (ClaimsPrincipal principal, AppDbContext db, string kidId) =>
+{
+    var parentId = GetUserId(principal);
+    if (string.IsNullOrWhiteSpace(parentId))
+        return Results.Unauthorized();
+
+    var kidOwned = await db.Kids.AnyAsync(k => k.Id == kidId && k.ParentId == parentId);
+    if (!kidOwned)
+        return Results.BadRequest("Unknown kidId for this parent.");
+
+    var history = await db.PointTransactions
+        .Where(x => x.KidId == kidId)
+        .OrderByDescending(x => x.CreatedAtUtc)
+        .Select(x => new
+        {
+            x.Id,
+            x.Type,
+            x.Delta,
+            x.Note,
+            x.TaskId,
+            x.RedemptionId,
+            x.CreatedAtUtc
+        })
+        .ToListAsync();
+
+    return Results.Ok(history);
+})
+.RequireAuthorization("ParentOnly");
+
+
+// Kid-friendly: current kid views their own points history
+api.MapGet("/points/history", async (ClaimsPrincipal principal, AppDbContext db) =>
+{
+    var role = principal.FindFirstValue(ClaimTypes.Role);
+    if (role != "Kid") return Results.Forbid();
+
+    var kidId = principal.FindFirstValue("kidId") ?? GetUserId(principal);
+    if (string.IsNullOrWhiteSpace(kidId)) return Results.Unauthorized();
+
+    var history = await db.PointTransactions
+        .Where(x => x.KidId == kidId)
+        .OrderByDescending(x => x.CreatedAtUtc)
+        .Select(x => new
+        {
+            x.Id,
+            x.Type,
+            x.Delta,
+            x.Note,
+            x.TaskId,
+            x.RedemptionId,
+            x.CreatedAtUtc
+        })
+        .ToListAsync();
+
+    return Results.Ok(new { kidId, history });
+})
+.RequireAuthorization("KidOnly");
+
 
 // -------------------- Rewards + Redemptions --------------------
 
@@ -611,11 +678,25 @@ api.MapPost("/rewards/{rewardId:int}/redeem", async (ClaimsPrincipal principal, 
     };
 
     db.Redemptions.Add(redemption);
+    await db.SaveChangesAsync(); // redemption.Id is now available (if it's DB-generated)
+
+    // ✅ Ledger entry (spend history)
+    db.PointTransactions.Add(new PointTransaction
+    {
+        KidId = kidId,
+        Type = PointTransactionType.Spend,
+        Delta = -reward.Cost,
+        RedemptionId = redemption.Id,
+        Note = $"Redeemed reward: {reward.Name}",
+        CreatedAtUtc = DateTime.UtcNow
+    });
+
     await db.SaveChangesAsync();
 
     return Results.Ok(new { kidId, newPoints = kid.PointsBalance, redemption });
 })
 .RequireAuthorization("KidOnly");
+
 
 
 // -------------------- Todos --------------------

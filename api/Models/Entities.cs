@@ -49,3 +49,34 @@ public class TodoItem
     public string Title { get; set; } = "";
     public bool IsDone { get; set; }
 }
+
+public enum PointTransactionType
+{
+    Earn = 1,
+    Spend = 2,
+    Adjust = 3
+}
+
+public class PointTransaction
+{
+    public int Id { get; set; }
+
+    public string KidId { get; set; } = "";
+    public KidProfile? Kid { get; set; }
+
+    public PointTransactionType Type { get; set; }
+
+    // Positive for Earn/Adjust+, negative for Spend/Adjust-
+    public int Delta { get; set; }
+
+    // Optional: link to what caused it
+    public int? TaskId { get; set; }
+    public KidTask? Task { get; set; }
+
+    public int? RedemptionId { get; set; }
+    public Redemption? Redemption { get; set; }
+
+    public string Note { get; set; } = "";
+
+    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+}
