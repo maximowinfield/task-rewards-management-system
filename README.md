@@ -15,6 +15,7 @@ The system supports a **parent–child workflow** where parents create and manag
 | **Web Application** | https://task-rewards-management-system-1.onrender.com/ |
 
 > ⚠️ The backend is hosted on Render (free tier). The first request may take a few seconds to wake up.
+> Try Logging out and back in to clear any errors caused by a sleeping server. Demo Credentials below.
 
 **Demo Credentials**
 - **User:** `parent1`
