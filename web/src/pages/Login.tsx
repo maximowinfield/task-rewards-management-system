@@ -9,8 +9,11 @@ export default function Login(): JSX.Element {
 
   // ✅ Demo env (Vite)
   const demoEnabled = import.meta.env.VITE_DEMO_ENABLED === "true";
-  const demoUser = import.meta.env.VITE_DEMO_USERNAME ?? "";
-  const demoPass = import.meta.env.VITE_DEMO_PASSWORD ?? "";
+
+  // ✅ Fallback demo creds (if env vars are missing)
+  const demoUser = import.meta.env.VITE_DEMO_USERNAME ?? "parent1";
+  const demoPass = import.meta.env.VITE_DEMO_PASSWORD ?? "ChangeMe123";
+  const demoPin = import.meta.env.VITE_DEMO_PARENT_PIN ?? "1234";
 
   // ✅ Prefill only when demo is enabled
   const initialUsername = useMemo(
@@ -98,10 +101,13 @@ export default function Login(): JSX.Element {
             Demo credentials
           </div>
           <div>
-            <strong>Username:</strong> {demoUser}
+            <strong>User:</strong> {demoUser}
           </div>
           <div>
             <strong>Password:</strong> {demoPass}
+          </div>
+          <div>
+            <strong>Parent Pin:</strong> {demoPin}
           </div>
         </div>
       )}
