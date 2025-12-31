@@ -13,47 +13,28 @@ COPY web/ ./
 # Render (API serves UI): VITE_API_URL=/api and VITE_BASE=/
 ARG VITE_API_URL=/api
 ARG VITE_BASE=/
+
+# ✅ Demo envs (add these)
+ARG VITE_DEMO_ENABLED=false
+ARG VITE_DEMO_USERNAME=parent1
+ARG VITE_DEMO_PASSWORD=ChangeMe123
+ARG VITE_DEMO_PARENT_PIN=1234
+
 ENV VITE_API_URL=${VITE_API_URL}
 ENV VITE_BASE=${VITE_BASE}
 
+# ✅ expose demo envs to the build
+ENV VITE_DEMO_ENABLED=${VITE_DEMO_ENABLED}
+ENV VITE_DEMO_USERNAME=${VITE_DEMO_USERNAME}
+ENV VITE_DEMO_PASSWORD=${VITE_DEMO_PASSWORD}
+ENV VITE_DEMO_PARENT_PIN=${VITE_DEMO_PARENT_PIN}
+
 # Vite reads env vars at build time
 RUN echo "VITE_API_URL=${VITE_API_URL}" > .env.production \
-    && echo "VITE_BASE=${VITE_BASE}" >> .env.production
+    && echo "VITE_BASE=${VITE_BASE}" >> .env.production \
+    && echo "VITE_DEMO_ENABLED=${VITE_DEMO_ENABLED}" >> .env.production \
+    && echo "VITE_DEMO_USERNAME=${VITE_DEMO_USERNAME}" >> .env.production \
+    && echo "VITE_DEMO_PASSWORD=${VITE_DEMO_PASSWORD}" >> .env.production \
+    && echo "VITE_DEMO_PARENT_PIN=${VITE_DEMO_PARENT_PIN}" >> .env.production
 
 RUN npm run build
-
-
-
-
-# ---------- 2) Build & publish .NET API ----------
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS api-build
-WORKDIR /src
-
-# copy API csproj first for better caching
-COPY api/*.csproj ./api/
-RUN dotnet restore ./api/MsFullstackSample.Api.csproj
-
-# copy the rest of the API source
-COPY api/ ./api/
-
-# copy built React dist into api/wwwroot
-COPY --from=web-build /src/web/dist ./api/wwwroot/
-
-# publish (SPECIFY THE PROJECT FILE)
-RUN dotnet publish ./api/MsFullstackSample.Api.csproj -c Release -o /app/publish
-
-
-
-# ---------- 3) Runtime image ----------
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
-WORKDIR /app
-COPY --from=api-build /app/publish ./
-
-# Render provides PORT at runtime
-ENV ASPNETCORE_URLS=http://0.0.0.0:${PORT}
-
-# Optional: documents the default Render port (not required, but fine)
-EXPOSE 10000
-
-ENTRYPOINT ["dotnet", "MsFullstackSample.Api.dll"]
-
