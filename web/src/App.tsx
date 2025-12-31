@@ -8,6 +8,12 @@ import RequireRole from "./components/RequireRole";
 import { useAuth } from "./context/AuthContext";
 import SelectKid from "./pages/SelectKid";
 
+// 🔗 External links (global)
+const GITHUB_URL = "https://github.com/maximowinfield";
+const RESUME_URL =
+  "https://github.com/maximowinfield/maximowinfield/blob/main/Maximo_Winfield_Resume_Tailwind_Skills.pdf?raw=true";
+
+
 // ✅ Helper lives here (outside the component)
 function mapPathForRole(
   pathname: string,
@@ -214,6 +220,53 @@ export default function App(): JSX.Element {
             </Link>
           </>
         )}
+
+{/* Center branding */}
+{isAuthed && (
+  <div
+    style={{
+      marginLeft: 12,
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      padding: "8px 12px",
+      borderRadius: 999,
+      border: `1px solid ${theme.border}`,
+      background: theme.pillBg,
+      color: theme.text,
+      fontWeight: 800,
+      whiteSpace: "nowrap",
+    }}
+  >
+    <span>Maximo Winfield</span>
+    <span style={{ opacity: 0.6 }}>•</span>
+
+    <a
+      href={GITHUB_URL}
+      target="_blank"
+      rel="noreferrer"
+      style={{ color: theme.text, textDecoration: "none", fontWeight: 800, opacity: 0.9 }}
+      onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+      onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+    >
+      GitHub
+    </a>
+
+    <a
+      href={RESUME_URL}
+      target="_blank"
+      rel="noreferrer"
+      style={{ color: theme.text, textDecoration: "none", fontWeight: 800, opacity: 0.9 }}
+      onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+      onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+    >
+      Resume
+    </a>
+  </div>
+)}
+
+
+
 
         {/* Right side: login OR mode buttons */}
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
