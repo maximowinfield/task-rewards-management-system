@@ -1,0 +1,149 @@
+# /
+
+TASK & REWARDS MANAGEMENT SYSTEM
+INTERVIEW WALKTHROUGH
+========================================================
+
+## OVERVIEW
+
+This is a role-based Tasks and Rewards system designed for a parent and child.
+A Parent can create kids, assign tasks, and manage rewards.
+A Kid can complete tasks, earn points, and redeem rewards.
+
+The system is secured end-to-end using JWT authentication with role-based authorization.
+
+## HIGH-LEVEL ARCHITECTURE
+
+The application is structured into three clear layers:
+
+1. Frontend (React)
+2. API Client (Axios)
+3. Backend (ASP.NET Core Minimal API + EF Core)
+
+Each layer has a single responsibility and clean boundaries.
+
+## FRONTEND FLOW (REACT)
+
+The app boots in main.tsx, where it is wrapped in:
+
+- AuthProvider (authentication + role state)
+- BrowserRouter (client-side routing)
+
+Routing and navigation live in App.tsx.
+Routes are mirrored by role:
+
+- Parent routes use /parent/\*
+- Kid routes use /kid/\*
+
+RequireRole is used as a route guard to protect routes based on the active role.
+
+## AUTH STATE DESIGN
+
+Authentication is managed by AuthContext.
+
+It stores:
+
+- parentToken
+- kidToken
+- activeRole (which token the API uses)
+- uiMode (which UI view is shown)
+
+activeRole is the source of truth for API calls.
+uiMode controls presentation only.
+
+This separation prevents bugs where the UI shows one role but API calls use another token.
+
+Auth state is persisted to localStorage so page refreshes do not log the user out.
+
+## API CLIENT LAYER
+
+All HTTP requests go through a single shared axios instance in api.ts.
+
+Responsibilities:
+
+- Centralized base URL for dev and production
+- Automatically attaches the correct JWT via request interceptor
+- Keeps axios defaults in sync on login, logout, or role changes
+
+This keeps HTTP logic out of UI components.
+
+## BACKEND FLOW (ASP.NET CORE MINIMAL API)
+
+The backend is implemented using ASP.NET Core Minimal APIs.
+
+Program.cs acts as:
+
+- The API entry point
+- The SPA host for the deployed frontend
+
+## MIDDLEWARE PIPELINE
+
+Requests flow through middleware in this order:
+
+1. Routing
+2. CORS
+3. Authentication
+4. Authorization
+
+CORS runs before authentication so browsers receive headers even on protected routes.
+
+## AUTHENTICATION AND AUTHORIZATION
+
+JWT Bearer authentication validates tokens using a symmetric signing key.
+
+Authorization policies:
+
+- ParentOnly
+- KidOnly
+- KidOrParent
+
+Policies control access, while ownership checks ensure users can only access their own data.
+
+## DATA LAYER (EF CORE + SQLITE)
+
+EF Core is used with SQLite for persistence.
+
+Key entities:
+
+- KidProfile (stores current points balance)
+- KidTask
+- Reward
+- Redemption
+- PointTransaction (ledger)
+
+## LEDGER DESIGN
+
+PointTransaction acts as a financial-style ledger:
+
+- Positive delta = points earned
+- Negative delta = points spent
+
+Ledger history is preserved even if tasks or rewards are deleted.
+
+## END-TO-END EXAMPLE: COMPLETING A TASK
+
+1. Kid clicks "Complete Task" in the UI
+2. Frontend sends PUT /api/tasks/{id}/complete
+3. JWT is validated and role is confirmed
+4. Backend verifies task ownership
+5. Task is marked complete
+6. Points are added to KidProfile
+7. A PointTransaction ledger entry is created
+8. JSON response is returned
+9. UI refreshes tasks and points
+
+## WHY THIS DESIGN WORKS WELL
+
+- JWT authentication keeps the backend stateless and scalable
+- AuthContext prevents role/token mismatches
+- Centralized API client keeps HTTP logic clean
+- Ledger-based points tracking preserves history and integrity
+- Minimal API keeps the backend lightweight and understandable
+
+## INTERVIEW CLOSING LINE
+
+"This project shows how I think about full-stack systems as a whole:
+secure routing, clear separation of concerns, and predictable data flow
+from UI to database and back."
+========================================================
+\*/

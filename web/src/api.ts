@@ -8,34 +8,55 @@ import type {
   CreateRewardRequest,
 } from "./types";
 
-//
-// Base URL
-// In prod: "/api"
-// In dev: full URL if you want (via VITE_API_URL)
-//
+// ============================================================
+// api.ts (Frontend API Client)
+// - Central place for all HTTP calls to the backend.
+// - Uses one shared axios instance so configuration is consistent.
+// - Automatically attaches the correct JWT (Parent or Kid).
+// ============================================================
+
+/**
+ * Base URL for the API.
+ *
+ * Production:
+ * - When frontend and backend share the same origin, "/api" is sufficient.
+ *
+ * Development:
+ * - VITE_API_URL can be set to a full URL such as "http://localhost:5000/api".
+ */
 export const API_URL = import.meta.env.VITE_API_URL || "/api";
 
-//
-// ✅ ONE shared axios instance
-//
+/**
+ * One shared axios instance.
+ *
+ * Why:
+ * - Keeps baseURL, interceptors, and headers consistent.
+ * - Ensures all requests flow through the same configuration.
+ */
 export const api = axios.create({
   baseURL: API_URL,
 });
 
-//
-// ✅ Mobile-safe interceptor
-// Always attaches token even if React state hasn’t hydrated yet
-//
+/**
+ * Request interceptor.
+ *
+ * Purpose:
+ * - Attaches the Authorization header before every request.
+ * - Reads tokens directly from localStorage so refreshes and mobile restores
+ *   still send authenticated requests even before React state hydrates.
+ *
+ * Token selection:
+ * - Uses activeRole if present (true auth role).
+ * - Falls back to uiMode if activeRole is not available.
+ * - Chooses kidToken or parentToken accordingly.
+ */
 api.interceptors.request.use((config) => {
   try {
     const raw = localStorage.getItem("kidsrewards.auth.v1");
     if (raw) {
       const parsed = JSON.parse(raw);
 
-      // 🔑 Determine which role is active
       const role = parsed?.activeRole ?? parsed?.uiMode;
-
-      // 🔑 Pick the correct token
       const token =
         role === "Kid"
           ? parsed?.kidToken
@@ -47,16 +68,18 @@ api.interceptors.request.use((config) => {
       }
     }
   } catch {
-    // ignore storage / parse errors
+    // Ignore storage or parsing errors
   }
+
   return config;
 });
 
-
-
-//
-// ✅ Used by AuthContext to sync token immediately on login/logout
-//
+/**
+ * setApiToken
+ *
+ * Used by AuthContext after login/logout to immediately
+ * set or clear the Authorization header.
+ */
 export function setApiToken(token?: string) {
   if (token) {
     api.defaults.headers.common.Authorization = `Bearer ${token}`;
@@ -65,12 +88,16 @@ export function setApiToken(token?: string) {
   }
 }
 
-// ✅ Optional helper (nice)
+/**
+ * setApiRoleToken
+ *
+ * Convenience helper that selects the correct token
+ * based on the active role.
+ */
 export function setApiRoleToken(role: "Kid" | "Parent", auth: any) {
   const token = role === "Kid" ? auth?.kidToken : auth?.parentToken;
   setApiToken(token);
 }
-
 
 /* ============================================================
    AUTH

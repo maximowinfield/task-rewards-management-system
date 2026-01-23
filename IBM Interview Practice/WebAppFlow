@@ -1,0 +1,353 @@
+========================================
+TASK & REWARDS MANAGEMENT SYSTEM
+INTERVIEW WALKTHROUGH + FILE COMMENTS
+========================================
+
+----------------------------------------
+1) BACKEND: Program.cs (ASP.NET Core Minimal API)
+----------------------------------------
+
+/*
+Program.cs (Backend Entry Point)
+- Purpose:
+  - This file is the single entry point for the API AND the deployed SPA hosting.
+  - It wires up infrastructure (CORS, database, authentication/authorization) and defines the HTTP routes
+    using Minimal API endpoints (MapGet / MapPost / MapPut / MapDelete).
+
+- Key responsibilities:
+  1) CORS Policy ("Frontend")
+     - Allows only trusted frontend origins (localhost for dev + deployed URLs).
+     - CORS runs BEFORE auth so the browser can receive CORS headers on protected routes.
+
+  2) Database (EF Core + SQLite)
+     - Uses DB_PATH for Render persistent disk support.
+     - Ensures the directory exists before SQLite opens the file.
+     - Registers AppDbContext so endpoints can use dependency injection (AppDbContext db parameter).
+
+  3) Authentication (JWT Bearer)
+     - Validates tokens with a symmetric signing key (JWT_SECRET env var).
+     - RoleClaimType and NameClaimType are configured so role checks (Parent/Kid) work reliably.
+
+  4) Authorization Policies
+     - ParentOnly: only Parent JWTs can access routes like creating kids, creating tasks, editing rewards.
+     - KidOnly: only Kid JWTs can redeem rewards and view kid-only history.
+     - KidOrParent: shared access (ex: completing tasks) while still enforcing ownership rules.
+
+  5) Middleware order (important)
+     - UseRouting()
+     - UseCors("Frontend")
+     - UseAuthentication()
+     - UseAuthorization()
+     - This order ensures:
+       - CORS headers are present for browser requests
+       - JWT is validated before authorization checks run
+
+  6) API grouping
+     - api = app.MapGroup("/api") centralizes API routes and applies shared settings like RequireCors.
+     - Also maps an OPTIONS preflight handler under /api/* to support browser preflight checks.
+
+  7) Auth helpers
+     - GetUserId(): reads the authenticated user id from either NameIdentifier or "sub".
+     - CreateToken(): creates JWT tokens with role + optional kidId/parentId claims for convenience.
+
+  8) Database migration + seeding
+     - On startup, runs db.Database.Migrate() then seeds:
+       - a default parent user (parent1 / ChangeMe123)
+       - two default kids (kid-1 and kid-2)
+       - starter tasks and rewards
+     - This creates a consistent demo experience without manual setup.
+
+- Backend request flow (high-level):
+  Frontend (axios) -> /api/... -> CORS -> JWT Auth -> Authorization Policy -> Minimal API endpoint -> EF Core -> SQLite -> JSON response
+
+- Why Program.cs is “responsible for a lot”
+  - In Minimal API style, Program.cs often contains both:
+    (1) app configuration + middleware pipeline
+    (2) endpoint definitions (instead of controllers or endpoint files)
+  - For an interview, this is fine to describe as “a lightweight consolidated API” and mention it can be refactored
+    into feature folders later (ex: /Endpoints/TasksEndpoints.cs, /Endpoints/AuthEndpoints.cs).
+*/
+
+
+----------------------------------------
+2) BACKEND: Core domain + EF Core (Entities + AppDbContext)
+----------------------------------------
+
+/*
+Entities (AppUser, KidProfile, KidTask, Reward, Redemption, TodoItem, PointTransaction)
+- Purpose:
+  - These classes represent database tables (EF Core models).
+  - They define the data the system manages and enforce the “business shape” of the app.
+
+Important domain logic captured in the data model:
+- KidProfile.PointsBalance:
+  - Stores the kid’s current “account balance” of points.
+- PointTransaction:
+  - A ledger table that records earning/spending history.
+  - Delta > 0 = Earn/Adjust+
+  - Delta < 0 = Spend/Adjust-
+  - Optionally links to TaskId or RedemptionId so history has context.
+
+AppDbContext
+- Purpose:
+  - EF Core gateway that exposes DbSets and handles querying/saving to SQLite.
+  - Centralizes model configuration (relationships/indexes).
+
+OnModelCreating: PointTransaction relationship rules
+- Cascade delete for Kid: if a kid profile is removed, their ledger is removed (KidId required).
+- SetNull for Task/Redemption: if a task is deleted, history remains but TaskId becomes null.
+- Indexes:
+  - KidId index and (KidId, CreatedAtUtc) index improve “points history” queries.
+*/
+
+
+----------------------------------------
+3) FRONTEND: main.tsx (React app bootstrap)
+----------------------------------------
+
+/*
+main.tsx (Frontend Entry Point)
+- Purpose:
+  - Bootstraps the React application and wraps it with global providers:
+    1) <AuthProvider> provides authentication + role/mode state to the whole app
+    2) <BrowserRouter> enables client-side routing
+
+- Demo flag
+  - If VITE_DEMO_ENABLED is true, a global window flag is set so the UI can enable demo-friendly behavior.
+*/
+
+
+----------------------------------------
+4) FRONTEND: App.tsx (Routing + role-aware navigation)
+----------------------------------------
+
+/*
+App.tsx (Root UI + Routing)
+- Purpose:
+  - Defines the route map using React Router.
+  - Provides role-aware navigation and “mode switching” between Parent Mode and Kid Mode.
+
+Key concepts:
+1) activeRole vs uiMode
+- activeRole = the AUTH truth (based on which JWT token is currently active)
+- uiMode = the UI presentation mode (Parent view vs Kid view)
+- This separation prevents bugs where UI says one thing but API calls are using a different token.
+
+2) Role-mirrored routes
+- Parent routes:
+  - /parent/select-kid
+  - /parent/kids/:kidId
+  - /parent/todos
+- Kid routes:
+  - /kid/kids/:kidId
+  - /kid/todos
+- mapPathForRole() translates /parent/... to /kid/... so switching modes keeps you on the “same page”.
+
+3) Mode switching UX
+- switchToParentMode() prompts for a Parent PIN and then navigates to the correct parent route.
+- switchToKidMode() calls enterKidMode(kidId) which fetches a kid JWT from the backend and switches auth state.
+
+4) Default route logic
+- If not authenticated -> redirect to /login
+- If Parent authenticated but no kid selected -> redirect to /parent/select-kid
+- If Kid authenticated -> redirect to /kid/kids/:kidId if available
+
+In interviews:
+- “App.tsx is the traffic controller: it decides where users can go based on role and selected kid context.”
+*/
+
+
+----------------------------------------
+5) FRONTEND: AuthContext.tsx (Auth + token source-of-truth)
+----------------------------------------
+
+/*
+AuthContext.tsx (Authentication + Role State Manager)
+- Purpose:
+  - Stores authentication state (parentToken, kidToken, role, selected kid).
+  - Persists auth to localStorage so refreshes don’t log the user out.
+  - Keeps the shared API client token in sync with the active role.
+
+Key responsibilities:
+1) Persistent auth
+- Uses STORAGE_KEY = "kidsrewards.auth.v1"
+- loadAuth() reads localStorage safely and reconstructs:
+  - parentToken, kidToken
+  - activeRole (Kid if kidToken exists, else Parent if parentToken exists)
+  - uiMode (UI-only)
+
+2) Token synchronization
+- When auth changes, setApiRoleToken(...) / setApiToken(...) updates axios default Authorization header.
+- This ensures every API call includes the correct JWT automatically.
+
+3) enterKidMode(kidId)
+- Requires parentToken
+- Calls startKidSession({kidId}) on backend
+- Backend returns a kid token + displayName
+- Stores kidToken and switches activeRole = "Kid"
+- Now the frontend can safely access Kid-only routes and endpoints.
+
+4) enterParentMode()
+- Switches UI back to Parent
+- Keeps activeRole safe (only sets Parent if a parentToken exists).
+
+5) logout()
+- Clears state + localStorage + axios token.
+
+In interviews:
+- “AuthContext is my source of truth for which token is active, and it keeps the API client aligned with that role.”
+*/
+
+
+----------------------------------------
+6) FRONTEND: api.ts (Axios client + token attachment)
+----------------------------------------
+
+/*
+api.ts (HTTP Client Layer)
+- Purpose:
+  - Centralizes all API calls through one shared axios instance.
+  - Uses API_BASE from VITE_API_URL for dev/prod compatibility.
+
+Key behavior:
+- axios.create({ baseURL })
+- request interceptor reads localStorage and attaches Authorization header
+  (useful as a fallback if the page is refreshed before defaults are rehydrated)
+- setApiToken(token) sets axios default header for all future requests.
+
+In interviews:
+- “The API layer keeps HTTP logic in one place, so components focus on UI and state.”
+*/
+
+
+----------------------------------------
+7) FRONTEND: RequireRole.tsx (Route guard + safe redirects)
+----------------------------------------
+
+/*
+RequireRole.tsx (Route Protection)
+- Purpose:
+  - Guards routes based on the currently active role.
+  - Prevents situations where the URL is correct but the token is missing/invalid.
+
+Logic:
+1) If no tokens -> redirect to /login
+2) If activeRole is Kid but kidToken missing -> redirect to /login
+3) If activeRole is Parent but parentToken missing -> redirect to /login
+4) If route requires a role and user is wrong role:
+   - mirror the path to the user's current role (parent<->kid)
+   - fallback to role home if we don't recognize the page
+
+In interviews:
+- “RequireRole is my safety net. It prevents role/token mismatches and keeps navigation predictable.”
+*/
+
+
+----------------------------------------
+8) FRONTEND: KidsRewardsPage.tsx (Main feature page)
+----------------------------------------
+
+/*
+KidsRewardsPage.tsx (Core Feature Page: Tasks + Rewards + Points)
+- Purpose:
+  - This is the main dashboard for managing tasks and rewards.
+  - Behavior changes based on role/mode:
+    - Parent Mode: can create/edit/delete tasks and rewards, select different kids
+    - Kid Mode: can complete tasks and redeem rewards
+
+Key flow:
+1) Determine effectiveKidId
+- If URL has :kidId use that
+- Else if Kid role: use auth.kidId / selectedKidId
+- Else Parent role: use selectedKidId
+This ensures the UI always knows “which kid” we are operating on.
+
+2) Parent-only: load kids list
+- useEffect runs in Parent Mode to call getKids()
+- If no selectedKidId yet, auto-select the first kid for smoother UX
+
+3) Load the main data (parallel fetch)
+- loadAll(kidId) fetches:
+  - tasks for kid (getTasks)
+  - points balance for kid (getPoints)
+  - rewards list (getRewards)
+- Uses Promise.all for faster loading
+
+4) Actions
+- onCompleteTask -> PUT /tasks/{id}/complete
+  - backend marks complete, adds points to KidProfile, inserts ledger row (PointTransaction)
+- onRedeem -> POST /rewards/{id}/redeem
+  - backend checks points balance, subtracts points, creates Redemption + ledger spend row
+- Parent CRUD:
+  - createTask/createReward
+  - updateTask/updateReward
+  - deleteTask/deleteReward
+
+In interviews:
+- “This page is the main orchestration layer: it loads tasks/points/rewards and calls the API to mutate state.”
+*/
+
+
+----------------------------------------
+9) FRONTEND: Login.tsx (Parent login + demo support)
+----------------------------------------
+
+/*
+Login.tsx
+- Purpose:
+  - Parent signs in with username/password.
+  - Stores parentToken in AuthContext.
+  - Navigates to:
+    - selected kid page if one exists
+    - otherwise kid selector
+
+Demo support:
+- VITE_DEMO_ENABLED pre-fills demo credentials for easy reviewer testing.
+*/
+
+
+----------------------------------------
+10) FRONTEND: TodosPage.tsx (secondary feature)
+----------------------------------------
+
+/*
+TodosPage.tsx
+- Purpose:
+  - A simple shared “todo list” feature accessible to Parent and Kid roles.
+  - Demonstrates another secured feature with GET/POST/PUT/DELETE.
+
+Flow:
+- loadTodos() -> GET /api/todos
+- addTodo() -> POST /api/todos
+- toggleTodo() -> PUT /api/todos/{id}
+- deleteTodo() -> DELETE /api/todos/{id}
+*/
+
+
+----------------------------------------
+INTERVIEW WALKTHROUGH (Talk Track)
+----------------------------------------
+
+/*
+If I’m demoing the app, I explain it as two flows:
+
+A) Frontend flow
+1) The app boots in main.tsx and wraps everything in AuthProvider and BrowserRouter.
+2) App.tsx defines role-based routes like /parent/... and /kid/..., and protects them with RequireRole.
+3) AuthContext is the source of truth for tokens and activeRole. It persists auth in localStorage.
+4) The axios API client automatically attaches the correct JWT.
+5) KidsRewardsPage loads tasks/points/rewards and updates the UI based on whether the user is in Parent Mode or Kid Mode.
+
+B) Backend flow
+1) Requests come into Program.cs where middleware runs in this order:
+   Routing -> CORS -> Authentication -> Authorization.
+2) JWT bearer validates the token and reads claims like role, sub, and optional kidId/parentId.
+3) Minimal API endpoints under /api enforce ParentOnly/KidOnly policies and ownership checks.
+4) EF Core uses AppDbContext to query/update SQLite.
+5) The API returns JSON back to the React app, which updates state and re-renders.
+
+Quick example:
+- Completing a task:
+  Frontend button -> PUT /api/tasks/{id}/complete (kid JWT) -> backend marks task complete,
+  adds points to KidProfile, writes a PointTransaction ledger row -> returns updated data -> UI refreshes points/tasks.
+*/

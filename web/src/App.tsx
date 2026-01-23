@@ -1,4 +1,17 @@
 // src/App.tsx 12/30/2025
+//
+// Purpose:
+// - Defines the app shell (top bar + navigation) and all client-side routes.
+// - Routes are separated by role ("Parent" vs "Kid") and protected by <RequireRole />.
+// - Supports two concepts:
+//   1) activeRole = the real authenticated role (determines which JWT token we use)
+//   2) uiMode    = how the UI should behave/look (Parent Mode vs Kid Mode)
+//
+// Key ideas:
+// - Parent logs in first -> gets parentToken.
+// - Parent can start a kid session -> backend returns a kidToken (JWT with Kid role).
+// - Switching modes maps the current route to a role-specific equivalent (parent/... <-> kid/...).
+//
 import React from "react";
 import { Link, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import KidsRewardsPage from "./pages/KidsRewardsPage";
@@ -8,22 +21,30 @@ import RequireRole from "./components/RequireRole";
 import { useAuth } from "./context/AuthContext";
 import SelectKid from "./pages/SelectKid";
 
-// 🔗 External links (global)
+// External links shown in the top bar
 const GITHUB_URL = "https://github.com/maximowinfield";
 const RESUME_URL =
   "https://github.com/maximowinfield/maximowinfield/blob/main/Maximo_Winfield_Resume_Tailwind_Skills.pdf?raw=true";
 
-
-// ✅ Helper lives here (outside the component)
-function mapPathForRole(
-  pathname: string,
-  targetRole: "Parent" | "Kid"
-): string | null {
-  // already on correct prefix
+/**
+ * mapPathForRole
+ *
+ * Purpose:
+ * - When the user switches modes (Parent <-> Kid), we try to keep them on the "same" page,
+ *   just under the correct route prefix.
+ *
+ * Example:
+ * - /parent/kids/123 -> /kid/kids/123
+ * - /kid/todos       -> /parent/todos
+ *
+ * If we don't recognize the current path, return null and let the caller choose a safe fallback.
+ */
+function mapPathForRole(pathname: string, targetRole: "Parent" | "Kid"): string | null {
+  // If already on the correct prefix, keep it
   if (targetRole === "Parent" && pathname.startsWith("/parent/")) return pathname;
   if (targetRole === "Kid" && pathname.startsWith("/kid/")) return pathname;
 
-  // translate known mirrored routes
+  // Translate known mirrored routes
   if (targetRole === "Kid") {
     if (pathname.startsWith("/parent/kids")) return pathname.replace("/parent/kids", "/kid/kids");
     if (pathname.startsWith("/parent/todos")) return pathname.replace("/parent/todos", "/kid/todos");
@@ -34,21 +55,29 @@ function mapPathForRole(
     if (pathname.startsWith("/kid/todos")) return pathname.replace("/kid/todos", "/parent/todos");
   }
 
-  // unknown page → caller decides fallback
+  // Unknown route -> caller will decide fallback
   return null;
 }
 
 export default function App(): JSX.Element {
+  // AuthContext is the source of truth for tokens and role/mode switching helpers
   const { auth, enterKidMode, enterParentMode, logout } = useAuth();
+
+  // Router helpers (current location + ability to redirect)
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Detect system theme (used only for styling)
+  /**
+   * Theme detection:
+   * - Reads the user's OS/browser theme preference (dark vs light).
+   * - This is for styling only; it has nothing to do with authentication.
+   */
   const isDark =
     typeof window !== "undefined" &&
     window.matchMedia &&
     window.matchMedia("(prefers-color-scheme: dark)").matches;
 
+  // Theme palette used by inline styles (simple, no CSS framework required)
   const theme = {
     bg: isDark ? "#0b0f19" : "rgba(255,255,255,0.75)",
     text: isDark ? "#e5e7eb" : "#0f172a",
@@ -57,16 +86,39 @@ export default function App(): JSX.Element {
     pillActiveBg: isDark ? "rgba(99,102,241,0.25)" : "rgba(99,102,241,0.18)",
   };
 
-  // Auth
+  /**
+   * isAuthed:
+   * - If either a parentToken or kidToken exists, we consider the user logged in.
+   * - The API client will attach the correct token depending on activeRole.
+   */
   const isAuthed = !!auth?.parentToken || !!auth?.kidToken;
 
-  // UI Mode (not auth)
+  /**
+   * UI Mode vs Auth Role:
+   * - uiMode is just a UI choice (Kid Mode vs Parent Mode).
+   * - activeRole is the actual authenticated role we currently use for API calls.
+   *
+   * Example:
+   * - Parent may still have parentToken saved while browsing in Kid Mode,
+   *   but activeRole becomes "Kid" after starting a kid session.
+   */
   const isKidMode = auth?.uiMode === "Kid";
   const isParentMode = auth?.activeRole === "Parent" && auth?.uiMode === "Parent";
 
+  // Selected kid in the UI (used for routing to the correct kid dashboard)
   const selectedKidId = auth?.selectedKidId;
 
-  // ---- Routes based on activeRole (not uiMode) ----
+  /**
+   * kidsRewardsPath:
+   * - Determines where the "Kids + Rewards" nav pill should send the user.
+   * - Uses activeRole (not uiMode) to decide the correct route prefix.
+   *
+   * If we know a kidId:
+   * - /parent/kids/:kidId or /kid/kids/:kidId
+   *
+   * If no kidId:
+   * - /parent/kids or /kid/kids (page may prompt for selection or show list)
+   */
   const kidsRewardsPath =
     auth?.activeRole === "Kid"
       ? selectedKidId
@@ -76,7 +128,7 @@ export default function App(): JSX.Element {
         ? `/parent/kids/${selectedKidId}`
         : "/parent/kids";
 
-  // Nav pills
+  // Shared styling for top navigation pills
   const navPill: React.CSSProperties = {
     padding: "10px 14px",
     borderRadius: 999,
@@ -87,11 +139,12 @@ export default function App(): JSX.Element {
     color: theme.text,
   };
 
+  // Added on top of navPill when route is active
   const navPillActive: React.CSSProperties = {
     background: theme.pillActiveBg,
   };
 
-  // Buttons
+  // Styles for logout button
   const dangerBtn: React.CSSProperties = {
     padding: "6px 10px",
     borderRadius: 10,
@@ -103,6 +156,7 @@ export default function App(): JSX.Element {
     opacity: 0.9,
   };
 
+  // Styles for top-right buttons (Login / Kid Mode / Parent Mode / Change Kid)
   const topBtn: React.CSSProperties = {
     padding: "8px 12px",
     borderRadius: 10,
@@ -113,6 +167,22 @@ export default function App(): JSX.Element {
     fontWeight: 800,
   };
 
+  /**
+   * switchToParentMode
+   *
+   * Purpose:
+   * - Allows a kid-mode UI to be "locked" behind a simple Parent PIN gate.
+   * - Only possible if a parentToken exists (meaning a parent previously logged in).
+   *
+   * Flow:
+   * - Prompt for PIN
+   * - If correct:
+   *   - enterParentMode() updates AuthContext
+   *   - Map current path to the parent equivalent (if possible)
+   *   - Navigate there
+   * - If wrong:
+   *   - Keep kid mode
+   */
   async function switchToParentMode() {
     if (!auth?.parentToken) return;
 
@@ -132,24 +202,37 @@ export default function App(): JSX.Element {
     }
   }
 
+  /**
+   * switchToKidMode
+   *
+   * Purpose:
+   * - Starts a kid session (backend returns a Kid JWT).
+   * - Updates AuthContext so activeRole becomes "Kid" (API requests use kidToken).
+   *
+   * Requirements:
+   * - Must have a parentToken (parent must be logged in to request kid session).
+   * - Must have a selectedKidId (otherwise we redirect to select one).
+   */
   async function switchToKidMode() {
     if (!auth?.parentToken) return;
 
     const kidId = auth?.selectedKidId;
     if (!kidId) {
-      // ✅ Send them to selector instead of dead-ending
+      // If no kid is selected, send the parent to choose one
       navigate("/parent/select-kid", { replace: true });
       return;
     }
 
     try {
+      // Calls API: /api/kid-session -> returns kid JWT + display name
       await enterKidMode(kidId);
 
-      const mapped =
-        mapPathForRole(location.pathname, "Kid") ??
-        `/kid/kids/${kidId}`; // fallback if unknown page
+      const mapped = mapPathForRole(location.pathname, "Kid") ?? `/kid/kids/${kidId}`;
 
+      // If the mapped path lands on the kid list root, prefer the specific kid dashboard
       const finalPath = mapped === "/kid/kids" ? `/kid/kids/${kidId}` : mapped;
+
+      // Replace history entry so back button doesn't bounce between modes
       navigate(finalPath, { replace: true });
     } catch (e: any) {
       console.error(e);
@@ -157,6 +240,13 @@ export default function App(): JSX.Element {
     }
   }
 
+  /**
+   * clearAuth
+   *
+   * Purpose:
+   * - Logs out from both roles by clearing AuthContext + localStorage tokens.
+   * - Redirects user to /login.
+   */
   function clearAuth() {
     logout();
     navigate("/login", { replace: true });
@@ -171,7 +261,7 @@ export default function App(): JSX.Element {
         color: isDark ? "#e5e7eb" : "#0f172a",
       }}
     >
-      {/* Top bar */}
+      {/* Top bar: navigation + external links + mode switching */}
       <div
         style={{
           maxWidth: 980,
@@ -186,19 +276,17 @@ export default function App(): JSX.Element {
           color: theme.text,
         }}
       >
-        {/* Left side: nav pills (ONLY when logged in) */}
+        {/* Left side: nav pills (only show when logged in) */}
         {isAuthed && (
           <>
             <Link
               to={kidsRewardsPath}
               style={{
                 ...navPill,
-                ...(
-                  location.pathname.startsWith("/parent/kids") ||
-                  location.pathname.startsWith("/kid/kids")
-                    ? navPillActive
-                    : {}
-                ),
+                ...(location.pathname.startsWith("/parent/kids") ||
+                location.pathname.startsWith("/kid/kids")
+                  ? navPillActive
+                  : {}),
               }}
             >
               Kids + Rewards
@@ -208,12 +296,10 @@ export default function App(): JSX.Element {
               to={auth?.activeRole === "Kid" ? "/kid/todos" : "/parent/todos"}
               style={{
                 ...navPill,
-                ...(
-                  location.pathname.startsWith("/parent/todos") ||
-                  location.pathname.startsWith("/kid/todos")
-                    ? navPillActive
-                    : {}
-                ),
+                ...(location.pathname.startsWith("/parent/todos") ||
+                location.pathname.startsWith("/kid/todos")
+                  ? navPillActive
+                  : {}),
               }}
             >
               Todos
@@ -221,54 +307,61 @@ export default function App(): JSX.Element {
           </>
         )}
 
-{/* Center branding */}
-{isAuthed && (
-  <div
-    style={{
-      marginLeft: 12,
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      padding: "8px 12px",
-      borderRadius: 999,
-      border: `1px solid ${theme.border}`,
-      background: theme.pillBg,
-      color: theme.text,
-      fontWeight: 800,
-      whiteSpace: "nowrap",
-    }}
-  >
-    <span>Maximo Winfield</span>
-    <span style={{ opacity: 0.6 }}>•</span>
+        {/* Center branding + external links (only show when logged in) */}
+        {isAuthed && (
+          <div
+            style={{
+              marginLeft: 12,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "8px 12px",
+              borderRadius: 999,
+              border: `1px solid ${theme.border}`,
+              background: theme.pillBg,
+              color: theme.text,
+              fontWeight: 800,
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span>Maximo Winfield</span>
+            <span style={{ opacity: 0.6 }}>•</span>
 
-    <a
-      href={GITHUB_URL}
-      target="_blank"
-      rel="noreferrer"
-      style={{ color: theme.text, textDecoration: "none", fontWeight: 800, opacity: 0.9 }}
-      onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
-      onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
-    >
-      GitHub
-    </a>
+            <a
+              href={GITHUB_URL}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                color: theme.text,
+                textDecoration: "none",
+                fontWeight: 800,
+                opacity: 0.9,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+              onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+            >
+              GitHub
+            </a>
 
-    <a
-      href={RESUME_URL}
-      target="_blank"
-      rel="noreferrer"
-      style={{ color: theme.text, textDecoration: "none", fontWeight: 800, opacity: 0.9 }}
-      onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
-      onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
-    >
-      Resume
-    </a>
-  </div>
-)}
+            <a
+              href={RESUME_URL}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                color: theme.text,
+                textDecoration: "none",
+                fontWeight: 800,
+                opacity: 0.9,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+              onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+            >
+              Resume
+            </a>
+          </div>
+        )}
 
-
-
-
-        {/* Right side: login OR mode buttons */}
+        {/* Right side: Login button OR mode buttons */}
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
           {!isAuthed ? (
             <Link to="/login" style={{ textDecoration: "none" }}>
@@ -276,10 +369,12 @@ export default function App(): JSX.Element {
             </Link>
           ) : (
             <>
+              {/* Switch UI/auth context into kid mode (requires parentToken + selectedKidId) */}
               <button onClick={switchToKidMode} style={{ ...topBtn, opacity: isKidMode ? 0.7 : 1 }}>
                 Kid Mode
               </button>
 
+              {/* Switch UI back into parent mode (PIN-gated) */}
               <button
                 onClick={switchToParentMode}
                 style={{ ...topBtn, opacity: isParentMode ? 0.7 : 1 }}
@@ -287,6 +382,7 @@ export default function App(): JSX.Element {
                 Parent Mode
               </button>
 
+              {/* Parent-only shortcut to change which kid is selected */}
               {auth?.parentToken && (
                 <button onClick={() => navigate("/parent/select-kid")} style={topBtn}>
                   Change Kid
@@ -301,8 +397,13 @@ export default function App(): JSX.Element {
         </div>
       </div>
 
+      {/* App routes */}
       <Routes>
-        {/* Default route */}
+        {/* Default route:
+            - If not logged in: go to /login
+            - If logged in as Kid: go to /kid/kids/:kidId (or /kid/kids if not selected)
+            - If logged in as Parent: go to /parent/kids/:kidId (or /parent/select-kid if no kid selected)
+        */}
         <Route
           path="/"
           element={
@@ -316,7 +417,6 @@ export default function App(): JSX.Element {
               ) : selectedKidId ? (
                 <Navigate to={`/parent/kids/${selectedKidId}`} replace />
               ) : (
-                // ✅ Parent with no kid selected → go pick one
                 <Navigate to="/parent/select-kid" replace />
               )
             ) : (
@@ -325,9 +425,10 @@ export default function App(): JSX.Element {
           }
         />
 
+        {/* Public route */}
         <Route path="/login" element={<Login />} />
 
-        {/* Parent-only pages */}
+        {/* Parent-only routes */}
         <Route
           path="/parent/select-kid"
           element={
@@ -364,7 +465,7 @@ export default function App(): JSX.Element {
           }
         />
 
-        {/* Kid-only pages */}
+        {/* Kid-only routes */}
         <Route
           path="/kid/kids"
           element={
@@ -392,6 +493,7 @@ export default function App(): JSX.Element {
           }
         />
 
+        {/* Catch-all: redirect unknown paths back to the default resolver */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>

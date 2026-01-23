@@ -1,3 +1,9 @@
+// ============================================================
+// Program.cs (Minimal API)
+// - Wires up services (CORS, EF Core, JWT Auth) and maps endpoints
+// - Also serves the SPA (static files + index.html fallback)
+// ============================================================
+
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -12,25 +18,38 @@ using System.IO;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ✅ CORS Policy: allow dev + deployed origins
+// ============================================================
+// 1) CORS (Cross-Origin Resource Sharing)
+// - Browsers require the API to allow your frontend origin
+// - We name the policy "Frontend" and restrict to known origins
+// ============================================================
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("Frontend", policy =>
         policy.WithOrigins(
+                // Local dev origins
                 "http://localhost:5173",
                 "http://localhost:5000",
+
+                // Deployed frontend origins
                 "https://maximowinfield.github.io",
                 "https://microsoft-fullstack-sample.onrender.com"
             )
-            .AllowAnyHeader()
-            .AllowAnyMethod()
+            .AllowAnyHeader()  // allow Authorization, Content-Type, etc.
+            .AllowAnyMethod()  // allow GET/POST/PUT/DELETE
     );
 });
 
-// ✅ EF Core + SQLite (Render persistent disk via DB_PATH)
+// ============================================================
+// 2) Database (EF Core + SQLite)
+// - DB_PATH lets Render point SQLite to a persistent disk location
+// - If DB_PATH contains a directory (ex: /var/data/app.db), create it
+// ============================================================
+
 var dbPath = Environment.GetEnvironmentVariable("DB_PATH") ?? "app.db";
 
-// If DB_PATH includes a directory (Render: /var/data/app.db), ensure it exists
+// If DB_PATH includes a directory (Render example: /var/data/app.db), ensure it exists
 var dbDir = Path.GetDirectoryName(dbPath);
 if (!string.IsNullOrWhiteSpace(dbDir))
 {
@@ -39,17 +58,31 @@ if (!string.IsNullOrWhiteSpace(dbDir))
 
 Console.WriteLine($"[DB] Using SQLite at: {dbPath}");
 
+// Register AppDbContext so endpoints can accept (AppDbContext db) via DI
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite($"Data Source={dbPath}"));
 
-// Password hashing (lightweight, no full Identity stack)
+// ============================================================
+// 3) Password Hashing (Lightweight)
+// - We use IPasswordHasher<AppUser> without the full Identity stack
+// - Still stores passwords securely as hashes
+// ============================================================
+
 builder.Services.AddScoped<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>();
 
-// JWT Auth
+// ============================================================
+// 4) JWT Authentication
+// - JWT_SECRET is used to sign tokens
+// - The API validates the signature + expiry on every request
+// - RoleClaimType / NameClaimType controls how ClaimsPrincipal reads values
+// ============================================================
+
+// Read secret from configuration/env; fallback only for dev
 var jwtSecret =
     builder.Configuration["JWT_SECRET"]
-    ?? "dev-only-secret-change-me-32chars-minimum!!"; // 32+ chars
+    ?? "dev-only-secret-change-me-32chars-minimum!!"; // 32+ chars recommended
 
+// Symmetric key used to sign/verify tokens
 var jwtKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret));
 
 builder.Services
@@ -58,61 +91,103 @@ builder.Services
     {
         o.TokenValidationParameters = new TokenValidationParameters
         {
+            // We’re not using issuer/audience in this project (simple setup)
             ValidateIssuer = false,
             ValidateAudience = false,
+
+            // Signature must match our server secret
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = jwtKey,
+
+            // Reject expired tokens
             ValidateLifetime = true,
+
+            // Small tolerance for clock differences between machines
             ClockSkew = TimeSpan.FromMinutes(1),
+
+            // Tell ASP.NET where to read role + user id from
             RoleClaimType = ClaimTypes.Role,
             NameClaimType = ClaimTypes.NameIdentifier
         };
     });
 
+// ============================================================
+// 5) Authorization Policies
+// - Policies simplify endpoint protection:
+//   ParentOnly, KidOnly, and KidOrParent (shared access)
+// ============================================================
+
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("ParentOnly", policy => policy.RequireRole("Parent"));
     options.AddPolicy("KidOnly", policy => policy.RequireRole("Kid"));
-    // ✅ ADD THIS shared policy
+
+    // Shared policy for endpoints that either Kid or Parent can call
     options.AddPolicy("KidOrParent", policy =>
         policy.RequireRole("Kid", "Parent"));
 });
 
+// Build the app (service provider + middleware pipeline ready)
 var app = builder.Build();
 
+// Simple debug/version endpoint (helps confirm you’re hitting the right build)
 app.MapGet("/__version", () => Results.Text("CORS-GROUP-V1")).AllowAnonymous();
 
-// -------------------- ✅ SPA Static Files --------------------
+// ============================================================
+// 6) SPA Static Files
+// - UseDefaultFiles() looks for index.html automatically
+// - UseStaticFiles() serves built frontend assets
+// ============================================================
+
 app.UseDefaultFiles();
 app.UseStaticFiles();
-// ------------------------------------------------------------
 
-// Routing + Middleware order matters
+// ============================================================
+// 7) Middleware Pipeline (Order Matters)
+// - Routing selects the endpoint
+// - CORS must run before auth so preflight + requests get headers
+// - Authentication builds ClaimsPrincipal from JWT
+// - Authorization enforces roles/policies
+// ============================================================
+
 app.UseRouting();
-
-// CORS must be before auth so headers get added
 app.UseCors("Frontend");
-
 app.UseAuthentication();
 app.UseAuthorization();
 
-// All /api routes go through this group
+// ============================================================
+// 8) /api Route Grouping
+// - All API endpoints live under /api
+// - RequireCors ensures API responses include the correct CORS headers
+// ============================================================
+
 var api = app.MapGroup("/api").RequireCors("Frontend");
 
 // Preflight handler for anything under /api/*
+// - Browsers send OPTIONS before certain requests (Authorization header, PUT/DELETE, etc.)
+// - Returning 200 OK prevents “CORS preflight failed” issues
 api.MapMethods("/{*path}", new[] { "OPTIONS" }, () => Results.Ok())
    .AllowAnonymous();
 
-// Helper: reliably read the authenticated user id (Parent or Kid)
+// ============================================================
+// 9) Helpers
+// - GetUserId: reliably pull user id from JWT claims
+// - CreateToken: generate JWT for Parent or Kid sessions
+// ============================================================
+
 static string? GetUserId(ClaimsPrincipal principal)
 {
+    // NameIdentifier is our primary user id claim
+    // Fallback to "sub" (standard JWT subject claim)
     return principal.FindFirstValue(ClaimTypes.NameIdentifier)
         ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
 }
 
-// Helper: create JWT tokens
 string CreateToken(string subjectId, string role, string? kidId = null, string? parentId = null)
 {
+    // Core claims:
+    // - sub / NameIdentifier = user identity
+    // - role = authorization
     var claims = new List<Claim>
     {
         new Claim(JwtRegisteredClaimNames.Sub, subjectId),
@@ -120,13 +195,16 @@ string CreateToken(string subjectId, string role, string? kidId = null, string? 
         new Claim(ClaimTypes.Role, role),
     };
 
+    // Extra app-specific claims (used by frontend + certain endpoints)
     if (!string.IsNullOrWhiteSpace(kidId))
         claims.Add(new Claim("kidId", kidId));
 
     if (!string.IsNullOrWhiteSpace(parentId))
         claims.Add(new Claim("parentId", parentId));
 
+    // Create signed token
     var creds = new SigningCredentials(jwtKey, SecurityAlgorithms.HmacSha256);
+
     var token = new JwtSecurityToken(
         claims: claims,
         expires: DateTime.UtcNow.AddHours(8),
@@ -136,15 +214,24 @@ string CreateToken(string subjectId, string role, string? kidId = null, string? 
     return new JwtSecurityTokenHandler().WriteToken(token);
 }
 
-// -------------------- ✅ Database migrate + seed (safe) --------------------
+// ============================================================
+// 10) Database Migrate + Seed (Safe Startup)
+// - Ensures schema exists
+// - Seeds a default Parent, Kids, Rewards, and Tasks if missing
+// ============================================================
+
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    // Apply EF Core migrations automatically
     db.Database.Migrate();
 
     var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<AppUser>>();
 
-    // Ensure default parent exists
+    // -----------------------
+    // Seed: default parent
+    // -----------------------
     var parent = db.Users.FirstOrDefault(u => u.Username == "parent1" && u.Role == "Parent");
     if (parent == null)
     {
@@ -154,14 +241,19 @@ using (var scope = app.Services.CreateScope())
             Username = "parent1",
             Role = "Parent"
         };
+
+        // Store a hashed password (never store plaintext passwords)
         parent.PasswordHash = hasher.HashPassword(parent, "ChangeMe123");
+
         db.Users.Add(parent);
         db.SaveChanges();
     }
 
     var parentId = parent.Id;
 
-    // Ensure default kids exist for that parent (kid-1 / kid-2)
+    // -----------------------
+    // Seed: kids for this parent
+    // -----------------------
     if (!db.Kids.Any(k => k.ParentId == parentId))
     {
         db.Kids.AddRange(
@@ -171,7 +263,9 @@ using (var scope = app.Services.CreateScope())
         db.SaveChanges();
     }
 
-    // Seed default rewards if none exist
+    // -----------------------
+    // Seed: rewards (if empty)
+    // -----------------------
     if (!db.Rewards.Any())
     {
         db.Rewards.AddRange(
@@ -182,7 +276,9 @@ using (var scope = app.Services.CreateScope())
         db.SaveChanges();
     }
 
-    // Seed default tasks if none exist (avoid duplicating)
+    // -----------------------
+    // Seed: tasks (if empty)
+    // -----------------------
     if (!db.Tasks.Any())
     {
         db.Tasks.AddRange(
@@ -217,23 +313,31 @@ using (var scope = app.Services.CreateScope())
         db.SaveChanges();
     }
 }
-// -------------------------------------------------------------------------------
 
-// Health
+// ============================================================
+// 11) Health Check
+// - Basic endpoint to confirm API is running
+// ============================================================
+
 api.MapGet("/health", () => Results.Ok(new { status = "ok" }))
    .AllowAnonymous();
 
-// -------------------- Auth --------------------
+// ============================================================
+// 12) Auth Endpoints
+// - /parent/login: verifies parent credentials and returns Parent JWT
+// - /kid-session: parent creates a "kid token" to act as a kid
+// ============================================================
 
 api.MapPost("/parent/login", async (AppDbContext db, IPasswordHasher<AppUser> hasher, ParentLoginRequest req) =>
 {
     var username = (req.Username ?? "").Trim();
     var password = req.Password ?? "";
 
+    // Reject missing credentials
     if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
         return Results.Unauthorized();
 
-    // ✅ Case-insensitive username match + parent role
+    // Case-insensitive match + Parent role only
     var user = await db.Users.FirstOrDefaultAsync(u =>
         u.Role == "Parent" &&
         u.Username.ToLower() == username.ToLower()
@@ -241,28 +345,38 @@ api.MapPost("/parent/login", async (AppDbContext db, IPasswordHasher<AppUser> ha
 
     if (user is null) return Results.Unauthorized();
 
+    // Verify password hash
     var verified = hasher.VerifyHashedPassword(user, user.PasswordHash, password);
     if (verified == PasswordVerificationResult.Failed) return Results.Unauthorized();
 
+    // Create a Parent JWT (role=Parent)
     var token = CreateToken(subjectId: user.Id, role: "Parent");
+
     return Results.Ok(new { token, role = "Parent" });
 })
 .AllowAnonymous();
 
 api.MapPost("/kid-session", async (ClaimsPrincipal principal, AppDbContext db, KidSessionRequest req) =>
 {
+    // Parent must already be authenticated to create a kid session
     var parentId = GetUserId(principal);
     if (string.IsNullOrWhiteSpace(parentId)) return Results.Unauthorized();
 
+    // Ensure kid belongs to this parent (ownership check)
     var kid = await db.Kids.FirstOrDefaultAsync(k => k.Id == req.KidId && k.ParentId == parentId);
     if (kid is null) return Results.NotFound("Kid not found for this parent.");
 
+    // Create Kid JWT with kidId + parentId claims
     var kidToken = CreateToken(subjectId: kid.Id, role: "Kid", kidId: kid.Id, parentId: parentId);
+
     return Results.Ok(new { token = kidToken, role = "Kid", kidId = kid.Id, displayName = kid.DisplayName });
 })
 .RequireAuthorization("ParentOnly");
 
-// -------------------- Kids --------------------
+// ============================================================
+// 13) Kids Endpoints (ParentOnly)
+// - Parents list, create, and update kid profiles
+// ============================================================
 
 api.MapGet("/kids", async (ClaimsPrincipal principal, AppDbContext db) =>
 {
@@ -272,7 +386,7 @@ api.MapGet("/kids", async (ClaimsPrincipal principal, AppDbContext db) =>
         if (string.IsNullOrWhiteSpace(parentId))
             return Results.Unauthorized();
 
-        // ✅ DEBUG: confirm DB has kids + parent filter works
+        // Debug logging to confirm parent filter + data
         Console.WriteLine($"[GET /api/kids] parentId={parentId}");
         Console.WriteLine($"[GET /api/kids] totalKids={await db.Kids.CountAsync()}");
         Console.WriteLine($"[GET /api/kids] kidsForParent={await db.Kids.CountAsync(k => k.ParentId == parentId)}");
@@ -292,8 +406,6 @@ api.MapGet("/kids", async (ClaimsPrincipal principal, AppDbContext db) =>
     }
 })
 .RequireAuthorization("ParentOnly");
-
-
 
 api.MapPost("/kids", async (ClaimsPrincipal principal, AppDbContext db, CreateKidRequest req) =>
 {
@@ -325,6 +437,7 @@ api.MapPut("/kids/{kidId}", async (ClaimsPrincipal principal, AppDbContext db, s
     var name = (req.DisplayName ?? "").Trim();
     if (string.IsNullOrWhiteSpace(name)) return Results.BadRequest("DisplayName is required.");
 
+    // Ownership check: kid must belong to parent
     var kid = await db.Kids.FirstOrDefaultAsync(k => k.Id == kidId && k.ParentId == parentId);
     if (kid is null) return Results.NotFound("Kid not found for this parent.");
 
@@ -335,14 +448,23 @@ api.MapPut("/kids/{kidId}", async (ClaimsPrincipal principal, AppDbContext db, s
 })
 .RequireAuthorization("ParentOnly");
 
-// -------------------- Tasks --------------------
+// ============================================================
+// 14) Tasks Endpoints
+// - GET /tasks: Kid sees own tasks; Parent sees created tasks or filters by kidId
+// - POST /tasks: Parent creates tasks for a kid
+// - PUT /tasks/{id}: Parent edits tasks they created
+// - PUT /tasks/{id}/complete: Kid completes own task OR Parent completes on behalf (KidOrParent policy)
+// - DELETE /tasks/{id}: Parent deletes tasks they created
+// ============================================================
 
 api.MapGet("/tasks", async (ClaimsPrincipal principal, AppDbContext db, string? kidId) =>
 {
     var role = principal.FindFirstValue(ClaimTypes.Role);
 
+    // ----- Kid view: only their tasks -----
     if (role == "Kid")
     {
+        // kidId claim is placed into the token when parent creates kid-session
         var kidClaim = principal.FindFirstValue("kidId") ?? GetUserId(principal);
         if (string.IsNullOrWhiteSpace(kidClaim)) return Results.Unauthorized();
 
@@ -350,11 +472,13 @@ api.MapGet("/tasks", async (ClaimsPrincipal principal, AppDbContext db, string? 
         return Results.Ok(tasks);
     }
 
+    // ----- Parent view: their tasks -----
     var parentId = GetUserId(principal);
     if (string.IsNullOrWhiteSpace(parentId)) return Results.Unauthorized();
 
     var q = db.Tasks.AsQueryable();
 
+    // If parent passes kidId, verify kid belongs to parent then filter
     if (!string.IsNullOrWhiteSpace(kidId))
     {
         var kidOwned = await db.Kids.AnyAsync(k => k.Id == kidId && k.ParentId == parentId);
@@ -363,6 +487,7 @@ api.MapGet("/tasks", async (ClaimsPrincipal principal, AppDbContext db, string? 
     }
     else
     {
+        // Default: show tasks created by this parent
         q = q.Where(t => t.CreatedByParentId == parentId);
     }
 
@@ -375,6 +500,7 @@ api.MapPost("/tasks", async (ClaimsPrincipal principal, AppDbContext db, CreateT
     var parentId = GetUserId(principal);
     if (string.IsNullOrWhiteSpace(parentId)) return Results.Unauthorized();
 
+    // Ownership check: Parent can only assign tasks to their own kids
     var kidExists = await db.Kids.AnyAsync(k => k.Id == req.AssignedKidId && k.ParentId == parentId);
     if (!kidExists) return Results.BadRequest("Unknown kidId for this parent.");
 
@@ -395,7 +521,7 @@ api.MapPost("/tasks", async (ClaimsPrincipal principal, AppDbContext db, CreateT
 })
 .RequireAuthorization("ParentOnly");
 
-// ✅ Parent edits a task (title/points/assigned kid)
+// Parent edits a task they created
 api.MapPut("/tasks/{id:int}", async (ClaimsPrincipal principal, AppDbContext db, int id, UpdateTaskRequest req) =>
 {
     var parentId = GetUserId(principal);
@@ -404,7 +530,7 @@ api.MapPut("/tasks/{id:int}", async (ClaimsPrincipal principal, AppDbContext db,
     var task = await db.Tasks.FirstOrDefaultAsync(t => t.Id == id && t.CreatedByParentId == parentId);
     if (task is null) return Results.NotFound("Task not found.");
 
-    // Title
+    // Update title if provided
     if (req.Title is not null)
     {
         var title = req.Title.Trim();
@@ -412,14 +538,14 @@ api.MapPut("/tasks/{id:int}", async (ClaimsPrincipal principal, AppDbContext db,
         task.Title = title;
     }
 
-    // Points
+    // Update points if provided
     if (req.Points is not null)
     {
         if (req.Points.Value < 0) return Results.BadRequest("Points must be >= 0.");
         task.Points = req.Points.Value;
     }
 
-    // Reassign kid (must belong to same parent)
+    // Reassign to a different kid (must still belong to same parent)
     if (req.AssignedKidId is not null)
     {
         var newKidId = req.AssignedKidId.Trim();
@@ -436,6 +562,9 @@ api.MapPut("/tasks/{id:int}", async (ClaimsPrincipal principal, AppDbContext db,
 })
 .RequireAuthorization("ParentOnly");
 
+// Complete a task:
+// - Kid completes their own task
+// - Parent can complete on behalf of a kid (must supply kidId + ownership check)
 api.MapPut("/tasks/{id:int}/complete", async (ClaimsPrincipal principal, AppDbContext db, int id, string? kidId) =>
 {
     var role = principal.FindFirstValue(ClaimTypes.Role);
@@ -454,25 +583,31 @@ api.MapPut("/tasks/{id:int}/complete", async (ClaimsPrincipal principal, AppDbCo
         if (string.IsNullOrWhiteSpace(parentId)) return Results.Unauthorized();
         if (string.IsNullOrWhiteSpace(kidId)) return Results.BadRequest("kidId is required for parent.");
 
+        // Ownership check: parent can only act on their own kids
         var kidOwned = await db.Kids.AnyAsync(k => k.Id == kidId && k.ParentId == parentId);
         if (!kidOwned) return Results.BadRequest("Unknown kidId for this parent.");
 
         effectiveKidId = kidId;
     }
 
+    // Task must be assigned to the effectiveKidId
     var task = await db.Tasks.FirstOrDefaultAsync(t => t.Id == id && t.AssignedKidId == effectiveKidId);
     if (task is null) return Results.NotFound();
 
+    // If already complete, return as-is (idempotent)
     if (task.IsComplete) return Results.Ok(task);
 
+    // Mark complete + timestamp
     task.IsComplete = true;
     task.CompletedAt = DateTime.UtcNow;
 
+    // Add points to the kid’s balance
     var kid = await db.Kids.FirstOrDefaultAsync(k => k.Id == effectiveKidId);
     if (kid is null) return Results.NotFound("Kid not found.");
 
     kid.PointsBalance += task.Points;
 
+    // Record ledger transaction for history
     db.PointTransactions.Add(new PointTransaction
     {
         KidId = kid.Id,
@@ -483,18 +618,17 @@ api.MapPut("/tasks/{id:int}/complete", async (ClaimsPrincipal principal, AppDbCo
         CreatedAtUtc = DateTime.UtcNow
     });
 
-
     await db.SaveChangesAsync();
     return Results.Ok(task);
 })
 .RequireAuthorization("KidOrParent");
-
 
 api.MapDelete("/tasks/{id:int}", async (ClaimsPrincipal principal, AppDbContext db, int id) =>
 {
     var parentId = GetUserId(principal);
     if (string.IsNullOrWhiteSpace(parentId)) return Results.Unauthorized();
 
+    // Parent can only delete tasks they created
     var task = await db.Tasks.FirstOrDefaultAsync(t => t.Id == id && t.CreatedByParentId == parentId);
     if (task is null) return Results.NotFound();
 
@@ -505,7 +639,12 @@ api.MapDelete("/tasks/{id:int}", async (ClaimsPrincipal principal, AppDbContext 
 })
 .RequireAuthorization("ParentOnly");
 
-// -------------------- Points --------------------
+// ============================================================
+// 15) Points Endpoints
+// - GET /points:
+//   Kid: gets own balance
+//   Parent: must provide kidId and pass ownership check
+// ============================================================
 
 api.MapGet("/points", async (ClaimsPrincipal principal, AppDbContext db, string? kidId) =>
 {
@@ -525,6 +664,7 @@ api.MapGet("/points", async (ClaimsPrincipal principal, AppDbContext db, string?
 
         if (string.IsNullOrWhiteSpace(kidId)) return Results.BadRequest("kidId is required for parent.");
 
+        // Ownership check
         var kidOwned = await db.Kids.AnyAsync(k => k.Id == kidId && k.ParentId == parentId);
         if (!kidOwned) return Results.BadRequest("Unknown kidId for this parent.");
 
@@ -538,13 +678,19 @@ api.MapGet("/points", async (ClaimsPrincipal principal, AppDbContext db, string?
 })
 .RequireAuthorization();
 
-// -------------------- History Endpoint --------------------
+// ============================================================
+// 16) Points History (Ledger)
+// - Parent: can view a specific kid’s history (ownership check)
+// - Kid: can view their own history
+// ============================================================
+
 api.MapGet("/kids/{kidId}/points/history", async (ClaimsPrincipal principal, AppDbContext db, string kidId) =>
 {
     var parentId = GetUserId(principal);
     if (string.IsNullOrWhiteSpace(parentId))
         return Results.Unauthorized();
 
+    // Parent can only view history for their own kid
     var kidOwned = await db.Kids.AnyAsync(k => k.Id == kidId && k.ParentId == parentId);
     if (!kidOwned)
         return Results.BadRequest("Unknown kidId for this parent.");
@@ -567,7 +713,6 @@ api.MapGet("/kids/{kidId}/points/history", async (ClaimsPrincipal principal, App
     return Results.Ok(history);
 })
 .RequireAuthorization("ParentOnly");
-
 
 // Kid-friendly: current kid views their own points history
 api.MapGet("/points/history", async (ClaimsPrincipal principal, AppDbContext db) =>
@@ -597,8 +742,12 @@ api.MapGet("/points/history", async (ClaimsPrincipal principal, AppDbContext db)
 })
 .RequireAuthorization("KidOnly");
 
-
-// -------------------- Rewards + Redemptions --------------------
+// ============================================================
+// 17) Rewards + Redemptions
+// - GET /rewards: anyone logged in can view rewards
+// - Parent: create/edit/delete rewards
+// - Kid: redeem rewards (deduct points + create redemption + ledger entry)
+// ============================================================
 
 api.MapGet("/rewards", async (AppDbContext db) =>
     Results.Ok(await db.Rewards.ToListAsync())
@@ -615,7 +764,6 @@ api.MapPost("/rewards", async (AppDbContext db, CreateRewardRequest req) =>
 })
 .RequireAuthorization("ParentOnly");
 
-// ✅ Parent edits a reward
 api.MapPut("/rewards/{id:int}", async (AppDbContext db, int id, UpdateRewardRequest req) =>
 {
     var reward = await db.Rewards.FirstOrDefaultAsync(r => r.Id == id);
@@ -639,7 +787,6 @@ api.MapPut("/rewards/{id:int}", async (AppDbContext db, int id, UpdateRewardRequ
 })
 .RequireAuthorization("ParentOnly");
 
-// ✅ Parent deletes a reward
 api.MapDelete("/rewards/{id:int}", async (AppDbContext db, int id) =>
 {
     var reward = await db.Rewards.FirstOrDefaultAsync(r => r.Id == id);
@@ -651,7 +798,10 @@ api.MapDelete("/rewards/{id:int}", async (AppDbContext db, int id) =>
 })
 .RequireAuthorization("ParentOnly");
 
-// Kid redeems a reward
+// Kid redeems reward:
+// - Must have enough points
+// - Deduct points from balance
+// - Store redemption + ledger transaction (Spend)
 api.MapPost("/rewards/{rewardId:int}/redeem", async (ClaimsPrincipal principal, AppDbContext db, int rewardId) =>
 {
     var kidId = principal.FindFirstValue("kidId") ?? GetUserId(principal);
@@ -666,10 +816,10 @@ api.MapPost("/rewards/{rewardId:int}/redeem", async (ClaimsPrincipal principal, 
     if (kid.PointsBalance < reward.Cost)
         return Results.BadRequest("Not enough points.");
 
-    // ✅ Deduct from saved balance
+    // Deduct points
     kid.PointsBalance -= reward.Cost;
 
-    // ✅ Keep redemption history
+    // Create redemption record
     var redemption = new Redemption
     {
         KidId = kidId,
@@ -678,9 +828,9 @@ api.MapPost("/rewards/{rewardId:int}/redeem", async (ClaimsPrincipal principal, 
     };
 
     db.Redemptions.Add(redemption);
-    await db.SaveChangesAsync(); // redemption.Id is now available (if it's DB-generated)
+    await db.SaveChangesAsync(); // redemption.Id available now
 
-    // ✅ Ledger entry (spend history)
+    // Ledger entry for spend history
     db.PointTransactions.Add(new PointTransaction
     {
         KidId = kidId,
@@ -697,9 +847,15 @@ api.MapPost("/rewards/{rewardId:int}/redeem", async (ClaimsPrincipal principal, 
 })
 .RequireAuthorization("KidOnly");
 
-
-
-// -------------------- Todos --------------------
+// ============================================================
+// 18) Todos (Shared Parent/Kid)
+// - GET: list todos
+// - POST: add todo
+// - PUT:
+//    Kid: can ONLY toggle IsDone
+//    Parent: can edit Title and IsDone
+// - DELETE: remove todo
+// ============================================================
 
 api.MapGet("/todos", async (AppDbContext db) =>
     Results.Ok(await db.Todos.OrderBy(t => t.Id).ToListAsync())
@@ -711,11 +867,15 @@ api.MapPost("/todos", async (AppDbContext db, TodoItem todo) =>
     if (string.IsNullOrWhiteSpace(todo.Title))
         return Results.BadRequest("Title is required.");
 
+    // Force EF to treat as new row
     todo.Id = 0;
+
+    // Normalize
     todo.Title = todo.Title.Trim();
 
     db.Todos.Add(todo);
     await db.SaveChangesAsync();
+
     return Results.Created($"/api/todos/{todo.Id}", todo);
 })
 .RequireAuthorization(policy => policy.RequireRole("Parent", "Kid"));
@@ -730,11 +890,11 @@ api.MapPut("/todos/{id:int}", async (ClaimsPrincipal principal, AppDbContext db,
     var todo = await db.Todos.FirstOrDefaultAsync(t => t.Id == id);
     if (todo is null) return Results.NotFound();
 
-    // ✅ Kids can ONLY toggle IsDone (and cannot change Title)
+    // Kid rules: only toggle IsDone
     if (role == "Kid")
     {
         if (updated.Title is not null)
-            return Results.Forbid(); // or Results.BadRequest("Kids cannot edit titles.")
+            return Results.Forbid(); // kids cannot edit titles
 
         if (updated.IsDone is null)
             return Results.BadRequest("IsDone is required.");
@@ -744,7 +904,7 @@ api.MapPut("/todos/{id:int}", async (ClaimsPrincipal principal, AppDbContext db,
         return Results.Ok(todo);
     }
 
-    // ✅ Parent behavior (full edit)
+    // Parent rules: full edit
     if (updated.Title is not null && string.IsNullOrWhiteSpace(updated.Title))
         return Results.BadRequest("Title cannot be empty.");
 
@@ -759,7 +919,6 @@ api.MapPut("/todos/{id:int}", async (ClaimsPrincipal principal, AppDbContext db,
 })
 .RequireAuthorization(policy => policy.RequireRole("Parent", "Kid"));
 
-
 api.MapDelete("/todos/{id:int}", async (AppDbContext db, int id) =>
 {
     var todo = await db.Todos.FirstOrDefaultAsync(t => t.Id == id);
@@ -767,21 +926,26 @@ api.MapDelete("/todos/{id:int}", async (AppDbContext db, int id) =>
 
     db.Todos.Remove(todo);
     await db.SaveChangesAsync();
+
     return Results.NoContent();
 })
 .RequireAuthorization(policy => policy.RequireRole("Parent", "Kid"));
 
+// ============================================================
+// 19) SPA Fallback (Deep Links)
+// - If user refreshes on /parent/kids or /kid/tasks, the server serves index.html
+// - React Router then takes over client-side routing
+// ============================================================
 
-
-// -------------------- ✅ SPA fallback (deep links) --------------------
 app.MapFallbackToFile("index.html");
 
 app.Run();
 
-
-// -------------------- Request DTOs --------------------
-// Put these in the same file if you don't have them elsewhere.
-// If they already exist, DO NOT duplicate them.
+// ============================================================
+// 20) Request DTOs (Update Models)
+// - Kept here if you don't have separate DTO files
+// - If you already have them elsewhere, do not duplicate
+// ============================================================
 
 public record UpdateTaskRequest(string? Title, int? Points, string? AssignedKidId);
 public record UpdateRewardRequest(string? Name, int? Cost);
