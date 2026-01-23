@@ -10,9 +10,11 @@ import type {
 
 // ============================================================
 // api.ts (Frontend API Client)
-// - Central place for all HTTP calls to the backend.
-// - Uses one shared axios instance so configuration is consistent.
-// - Automatically attaches the correct JWT (Parent or Kid).
+// ------------------------------------------------------------
+// Central place for all HTTP communication with the backend.
+// - Uses a single shared axios instance
+// - Automatically attaches the correct JWT (Parent or Kid)
+// - Keeps HTTP logic out of UI components
 // ============================================================
 
 /**
@@ -22,16 +24,17 @@ import type {
  * - When frontend and backend share the same origin, "/api" is sufficient.
  *
  * Development:
- * - VITE_API_URL can be set to a full URL such as "http://localhost:5000/api".
+ * - VITE_API_URL can be set to a full URL such as
+ *   "http://localhost:5000/api".
  */
 export const API_URL = import.meta.env.VITE_API_URL || "/api";
 
 /**
- * One shared axios instance.
+ * Shared axios instance.
  *
  * Why:
- * - Keeps baseURL, interceptors, and headers consistent.
- * - Ensures all requests flow through the same configuration.
+ * - Centralizes baseURL, interceptors, and headers.
+ * - Ensures consistent behavior across all requests.
  */
 export const api = axios.create({
   baseURL: API_URL,
@@ -42,12 +45,12 @@ export const api = axios.create({
  *
  * Purpose:
  * - Attaches the Authorization header before every request.
- * - Reads tokens directly from localStorage so refreshes and mobile restores
- *   still send authenticated requests even before React state hydrates.
+ * - Reads tokens directly from localStorage so authenticated
+ *   requests still work after refresh or before React state hydrates.
  *
  * Token selection:
- * - Uses activeRole if present (true auth role).
- * - Falls back to uiMode if activeRole is not available.
+ * - activeRole is the source of truth when present.
+ * - uiMode is used as a fallback if activeRole is unavailable.
  * - Chooses kidToken or parentToken accordingly.
  */
 api.interceptors.request.use((config) => {
@@ -68,17 +71,17 @@ api.interceptors.request.use((config) => {
       }
     }
   } catch {
-    // Ignore storage or parsing errors
+    // Ignore storage or JSON parsing errors
   }
 
   return config;
 });
 
 /**
- * setApiToken
+ * Sets or clears the Authorization header immediately.
  *
- * Used by AuthContext after login/logout to immediately
- * set or clear the Authorization header.
+ * Used by AuthContext after login, logout, or role changes
+ * so new requests are authenticated without waiting for interceptors.
  */
 export function setApiToken(token?: string) {
   if (token) {
@@ -89,14 +92,21 @@ export function setApiToken(token?: string) {
 }
 
 /**
- * setApiRoleToken
- *
+ * Minimal token shape used by the API layer.
+ * Avoids tight coupling with AuthContext.
+ */
+type TokenBag = {
+  parentToken?: string | null;
+  kidToken?: string | null;
+};
+
+/**
  * Convenience helper that selects the correct token
  * based on the active role.
  */
-export function setApiRoleToken(role: "Kid" | "Parent", auth: any) {
-  const token = role === "Kid" ? auth?.kidToken : auth?.parentToken;
-  setApiToken(token);
+export function setApiRoleToken(role: "Kid" | "Parent", auth: TokenBag) {
+  const token = role === "Kid" ? auth.kidToken : auth.parentToken;
+  setApiToken(token ?? undefined);
 }
 
 /* ============================================================
