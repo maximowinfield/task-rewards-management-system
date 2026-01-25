@@ -80,7 +80,7 @@ This mirrors real-world financial systems where performance and auditability are
 
 ---
 
-## Interview Talking Points (with Answers)
+## Interview Talking Points 
 
 ### How does the frontend talk to the backend?
 
