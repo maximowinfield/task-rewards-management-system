@@ -1,198 +1,149 @@
-# 🎯 Task Rewards Management System
+Task & Rewards Management System
+Overview
 
-## React + TypeScript + .NET 8 Minimal API + Entity Framework Core (EF Core) + Docker
+The Task & Rewards Management System is a full-stack web application designed to help parents manage household responsibilities by assigning tasks to kids, tracking completion, and rewarding progress through a points-based system.
 
-The **Task Rewards Management System** is a full-stack web application designed to help parents manage tasks, track progress, and reward kids for completed responsibilities.
+The system supports two distinct roles—Parent and Kid—each with tailored permissions, views, and authentication flows. Parents define tasks and rewards, while kids complete tasks and redeem rewards using earned points. All critical validation and state changes are enforced server-side to ensure consistency and security.
 
-The system supports a **parent–child workflow** where parents create and manage tasks and rewards, while kids complete tasks to earn points that can be redeemed. The project demonstrates real-world full-stack architecture, authentication, persistence, and cloud deployment using Microsoft-based technologies.
+This project was intentionally built to demonstrate real-world full-stack architecture, including role-based authentication, RESTful APIs, transactional state updates, and a clean separation of concerns across frontend and backend layers.
 
----
+🔗 Resume:
+https://github.com/maximowinfield/maximowinfield/blob/main/Maximo_Winfield_Resume31.pdf
 
-## 🚀 Live Demo
+Tech Stack
+Backend
 
-| Component | URL |
-|---------|-----|
-| **Web Application** | https://task-rewards-management-system-1.onrender.com/ |
+.NET 8 Minimal API
 
-> ⚠️ The backend is hosted on Render (free tier). The first request may take a few seconds to wake up.
-> Try Logging out and back in to clear any errors caused by a sleeping server. Demo Credentials below.
+Entity Framework Core (ORM)
 
-**Demo Credentials**
-- **User:** `parent1`
-- **Password:** `ChangeMe123`
-- **Parent Mode Pin:** `1234`
+SQLite (local) / PostgreSQL (production-ready)
 
----
+JWT Authentication (Parent & Kid roles)
 
-## 🧰 Tech Stack
+RESTful API design
 
-### Frontend
-- React 18 with TypeScript
-- Vite build tooling
-- React Router (multi-page SPA)
-- Axios for API communication
-- Deployed as a static single-page application
+Frontend
 
-### Backend
-- .NET 8 Minimal API
-- Entity Framework Core (EF Core)
-- SQLite database with migrations
-- JWT-based authentication
-- Domain-driven models for:
-  - Kids
-  - Tasks
-  - Rewards
-  - Redemptions
-  - Todos
+React + TypeScript
 
-### DevOps & Hosting
-- Docker Compose for local full-stack development
-- CI/CD with GitHub Actions
-- Production deployment:
-  - Frontend → Render
-  - Backend API → Render
+Vite
 
----
+Axios (centralized API client)
 
-## 🧩 Architecture Overview
+React Router
 
-The application follows a **clean, production-style architecture**:
+Context API (Auth state management)
 
-- A React single-page application (SPA) for the user interface
-- A RESTful .NET 8 Minimal API backend
-- EF Core managing persistence, migrations, and domain models
-- JWT authentication securing parent and kid workflows
-- Environment-specific configuration for local and cloud deployment
+Architecture & Patterns
 
-This architecture mirrors patterns commonly used in modern Microsoft-based full-stack applications.
+Role-based access control (RBAC)
 
-``` bash
-┌────────────┐ HTTP ┌───────────────┐
-│ React UI │ <------------> │ .NET 8 API │
-└────────────┘ └───────────────┘
-▲ ▲
-│ Docker Compose (local) │
-└──────────────┬──────────────┘
-▼
-CI/CD Pipeline
-▼
-Deploy Frontend → Render
-Deploy API → Render
-```
+Ledger pattern for points tracking
 
+RESTful resource modeling
 
----
+Provider abstraction for database portability
 
-## 🧠 Core Features
+Centralized auth + API layers
 
-- Parent-managed task and reward system
-- Kids earn points by completing assigned tasks
-- Reward redemption with point validation
-- Persistent data storage using EF Core + SQLite
-- Todo list with full Create, Read, Update, and Delete (CRUD) support
-- JWT-based authentication with parent and kid roles
-- Secure API endpoints with authorization and role awareness
-- Clean separation between frontend, backend, and persistence layers
+Core Features
 
----
+Parent login with JWT authentication
 
-## 🛠️ Running the Project Locally
+Kid session switching (parent-authorized)
 
-### 1️⃣ Clone the Repository
+Task creation, editing, deletion (Parent)
 
-```bash
-git clone https://github.com/maximowinfield/Microsoft-Fullstack-Sample.git
-cd Microsoft-Fullstack-Sample
-```
+Task completion (Kid)
 
-### 2️⃣ Run with Docker (Recommended)
-Start the backend
-``` bash
-cd api
-dotnet run
-```
-Start the frontend
-```bash
-cd web
-npm install
-npm run dev
-```
-Access locally:
+Reward creation and management (Parent)
 
-Frontend → http://localhost:5173
+Reward redemption with server-side validation (Kid)
 
-API → http://localhost:5000
+Points ledger with audit history
 
-### 🔌 API Overview
-The backend exposes REST endpoints to manage tasks, rewards, redemptions, kids, and todos.
+Persistent auth state across refreshes
 
-Example endpoints:
+Authentication & Roles
 
-| Method | Route             | Description   |
-| ------ | ----------------- | ------------- |
-| GET    | `/api/health`     | Health check  |
-| GET    | `/api/todos`      | Fetch todos   |
-| POST   | `/api/todos`      | Create a todo |
-| PUT    | `/api/todos/{id}` | Update a todo |
-| DELETE | `/api/todos/{id}` | Delete a todo |
+The system separates UI mode from authenticated role:
 
-### 🔐 Authentication & Deployment Notes
-## JWT Authentication
-Tokens are signed using HMAC SHA-256 (HS256)
+Parent
 
-A minimum 256-bit secret (32+ characters) is required
+Can manage kids, tasks, rewards
 
-Tokens secure all protected API routes
+Can start kid sessions
 
-Required Environment Variable (Backend)
-``` env
-JWT_SECRET=your-secure-secret-at-least-32-characters-long
-```
-This must be configured:
+Kid
 
-Locally (environment variables)
+Can complete tasks
 
-In Render’s environment settings for production
+Can redeem rewards
 
-## CORS Configuration
+Cannot modify system data
 
-Because the frontend and backend are deployed separately, Cross-Origin Resource Sharing (CORS) is explicitly configured to allow:
+JWT tokens determine the activeRole, which drives API authorization.
+The UI may switch modes, but API access always follows the authenticated role.
 
-Authenticated API requests
+Points & Ledger Design
 
-Proper preflight (OPTIONS) handling
+Each kid has a PointsBalance for fast reads
 
-Compatibility with both local development and cloud hosting
+Every earn/spend action creates a PointTransaction
 
-## 🎯 Key Takeaways
-This project reflects real-world full-stack development challenges, including:
+Transactions are immutable history records
 
-Independent frontend and backend deployments
+Balance updates and ledger writes happen together
 
-Secure authentication across environments
+This mirrors real financial systems where performance and auditability both matter.
 
-Coordinated CORS and JWT configuration
+Interview Talking Points (with Answers)
+1. How does the frontend talk to the backend?
 
-Persistent data modeling with EF Core
+The frontend uses a centralized API client (api.ts) built on Axios.
+All HTTP calls go through this layer, which automatically attaches the correct JWT based on the active role. This keeps authentication logic out of UI components and ensures consistency across requests.
 
-Clean separation of concerns and extensibility
+2. Why do you have a service / API layer on the frontend?
 
-## 🚀 Future Enhancements
-Finer-grained role-based authorization
+It separates concerns. UI components focus on rendering and interaction, while the API layer handles HTTP, auth headers, and request structure. This makes the code easier to test, maintain, and explain in interviews.
 
-Cloud-hosted database (Azure SQL or PostgreSQL)
+3. How do you handle authentication and role switching?
 
-Logging, telemetry, and observability
+I use JWTs for stateless authentication. Parents authenticate first, and can optionally start a kid session, which issues a separate kid JWT. The app tracks activeRole for security and uiMode for display, ensuring the correct token is always used.
 
-Automated frontend and backend testing
+4. How are tasks completed and points awarded?
 
-Optional Azure deployment with Microsoft Identity
+When a kid completes a task, the request hits a protected backend endpoint. The server marks the task complete, updates the kid’s point balance, and inserts a transaction into the ledger. This ensures points can’t be manipulated client-side.
 
-👤 Author
+5. How do you prevent invalid reward redemptions?
 
-Maximo Winfield
-Full-Stack Developer
+All validation happens server-side. Before redeeming a reward, the backend checks the kid’s current balance. If there aren’t enough points, the request fails. If it succeeds, points are deducted atomically and logged in the ledger.
 
-GitHub:
-https://github.com/maximowinfield
+6. Why use Entity Framework Core?
 
+EF Core gives me strongly-typed data access, relationship handling, and database provider abstraction. I can use SQLite locally and PostgreSQL in production without changing query logic, which mirrors real production workflows.
+
+7. Why is Program.cs not a “feature” file?
+
+Program.cs is infrastructure, not business logic. It configures middleware, authentication, and dependency injection. Features live in endpoints and services, which keeps responsibilities clear and scalable.
+
+8. What would you improve next?
+
+I’d add pagination for history views, optimistic UI updates for better UX, and possibly event-driven processing for points if the system scaled further.
+
+Why This Project Matters
+
+This project demonstrates:
+
+Practical full-stack system design
+
+Secure role-based authorization
+
+Real-world REST API patterns
+
+Thoughtful state management
+
+Interview-ready architecture decisions
+
+It’s built to be explained, not just run.
