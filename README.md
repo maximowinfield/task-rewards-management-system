@@ -117,6 +117,7 @@ ASP.NET Core API
    ↓ Entity Framework Core
 SQL Database
 🐛 Real-World Debugging Example
+```
 
 During development, task and reward state needed to stay consistent between the frontend interface and the backend database.
 
