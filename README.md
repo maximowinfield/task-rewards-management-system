@@ -115,101 +115,143 @@ React Frontend
 ASP.NET Core API
    ↓ Entity Framework Core
 SQL Database
-🐛 Real-World Debugging Example
 ```
+## 🐛 Real-World Debugging Example
 
 During development, task and reward state needed to stay consistent between the frontend interface and the backend database.
 
-Challenge: UI changes could appear successful on the frontend before confirming that the backend had saved the update correctly.
+**Challenge:** UI changes could appear successful on the frontend before confirming that the backend had saved the update correctly.
 
-Fix: Improved the API request flow so task updates, completion changes, and reward progress were synchronized with backend responses before finalizing the visible UI state.
+**Fix:** Improved the API request flow so task updates, completion changes, and reward progress were synchronized with backend responses before finalizing the visible UI state.
 
 This highlights the importance of reliable client-server communication, error handling, and keeping frontend state aligned with persisted backend data.
 
-🧪 Local Development
-Prerequisites
-Node.js 18+ recommended
-.NET 8 SDK
-SQL database or SQLite depending on configuration
-Backend
+---
+
+## 🧪 Local Development
+
+### Prerequisites
+
+- Node.js 18+ recommended
+- .NET 8 SDK
+- SQL database or SQLite depending on configuration
+
+### Backend
+
+```bash
 dotnet restore
 dotnet ef database update
 dotnet run
-Frontend
+```
+
+### Frontend
+
+```bash
 npm install
 npm run dev
+```
 
 Set environment variables as needed:
 
-VITE_API_URL
-Database connection string
-Any backend configuration values required for local development
-🎯 What This Project Demonstrates
-Full-stack application design
-RESTful API development
-CRUD functionality
-Frontend and backend integration
-Database-backed persistence
-Component-based UI development
-Practical software architecture
-User-focused feature development
-🔑 Key Files to Review
+- `VITE_API_URL`
+- Database connection string
+- Any backend configuration values required for local development
+
+---
+
+## 🎯 What This Project Demonstrates
+
+- Full-stack application design
+- RESTful API development
+- CRUD functionality
+- Frontend and backend integration
+- Database-backed persistence
+- Component-based UI development
+- Practical software architecture
+- User-focused feature development
+
+---
+
+## 🔑 Key Files to Review
 
 This project is structured to separate frontend components, API communication, backend business logic, and database models. The files below highlight the most important engineering decisions and features.
 
-🖥️ Frontend Application Logic
-src/App.jsx / src/App.tsx
-Main application structure
-Routes or primary page layout
-Connects core task and reward features
-src/components/TaskForm.jsx / TaskForm.tsx
-Task creation and editing form
-Controlled inputs and validation logic
-src/components/TaskList.jsx / TaskList.tsx
-Displays task records
-Handles task completion and delete actions
-Updates UI based on API responses
-src/components/RewardCard.jsx / RewardCard.tsx
-Displays reward progress
-Shows reward-related task completion information
-🔌 API Integration
-src/api/tasks.js / tasks.ts
-Frontend API calls for task records
-Handles GET, POST, PUT/PATCH, and DELETE requests
-src/api/rewards.js / rewards.ts
-Frontend API calls for reward data
-Connects reward UI to backend endpoints
-🔎 Backend Core API
-Controllers/TasksController.cs
-REST API endpoints for task management
-Handles create, read, update, and delete operations
-Controllers/RewardsController.cs
-REST API endpoints for reward tracking
-Handles reward progress and reward data operations
-Models/TaskItem.cs
-Task domain model
-Defines task fields, completion status, and related data
-Models/Reward.cs
-Reward domain model
-Defines reward structure and progress-related data
-Data/AppDbContext.cs
-Entity Framework Core database context
-Defines database tables and relationships
-⭐ Recommended Entry Point
+### 🖥️ Frontend Application Logic
+
+- **`src/App.jsx` / `src/App.tsx`**
+  - Main application structure
+  - Routes or primary page layout
+  - Connects core task and reward features
+
+- **`src/components/TaskForm.jsx` / `TaskForm.tsx`**
+  - Task creation and editing form
+  - Controlled inputs and validation logic
+
+- **`src/components/TaskList.jsx` / `TaskList.tsx`**
+  - Displays task records
+  - Handles task completion and delete actions
+  - Updates UI based on API responses
+
+- **`src/components/RewardCard.jsx` / `RewardCard.tsx`**
+  - Displays reward progress
+  - Shows reward-related task completion information
+
+---
+
+### 🔌 API Integration
+
+- **`src/api/tasks.js` / `tasks.ts`**
+  - Frontend API calls for task records
+  - Handles `GET`, `POST`, `PUT/PATCH`, and `DELETE` requests
+
+- **`src/api/rewards.js` / `rewards.ts`**
+  - Frontend API calls for reward data
+  - Connects reward UI to backend endpoints
+
+---
+
+### 🔎 Backend Core API
+
+- **`Controllers/TasksController.cs`**
+  - REST API endpoints for task management
+  - Handles create, read, update, and delete operations
+
+- **`Controllers/RewardsController.cs`**
+  - REST API endpoints for reward tracking
+  - Handles reward progress and reward data operations
+
+- **`Models/TaskItem.cs`**
+  - Task domain model
+  - Defines task fields, completion status, and related data
+
+- **`Models/Reward.cs`**
+  - Reward domain model
+  - Defines reward structure and progress-related data
+
+- **`Data/AppDbContext.cs`**
+  - Entity Framework Core database context
+  - Defines database tables and relationships
+
+---
+
+## ⭐ Recommended Entry Point
 
 If reviewing only one area of the project, start with:
 
-Frontend task management page/component
-TasksController.cs
-TaskItem.cs
-AppDbContext.cs
+- Frontend task management page/component
+- `TasksController.cs`
+- `TaskItem.cs`
+- `AppDbContext.cs`
 
 These files demonstrate the full flow from user interaction to API request, backend processing, and database persistence.
 
-📌 Future Enhancements
-User authentication and account-based task tracking
-Reward categories and priority levels
-Task deadlines and reminders
-Progress analytics and completion history
-Mobile-responsive dashboard improvements
-Deployment improvements and live demo restoration
+---
+
+## 📌 Future Enhancements
+
+- User authentication and account-based task tracking
+- Reward categories and priority levels
+- Task deadlines and reminders
+- Progress analytics and completion history
+- Mobile-responsive dashboard improvements
+- Deployment improvements and live demo restoration
