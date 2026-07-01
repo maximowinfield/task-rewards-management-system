@@ -44,7 +44,6 @@ Task Rewards Management System is a full-stack application with a React frontend
 - Separation of Concerns
 - Reusable Frontend Components
 
----
 
 ## 🚀 Features
 
